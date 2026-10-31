@@ -1,0 +1,27 @@
+// SVG path data for the line icons used across the storefront (from the design canvas).
+export const ICONS = {
+  leafSprig: "M5 19c0-8 5-14 15-14 0 10-6 15-14 15M5 19c3-4 6-7 10-9",
+  herbs: "M12 21V10M12 10c-1-4-4-6-8-6 0 4 3 7 8 6zM12 10c1-4 4-6 8-6 0 4-3 7-8 6zM12 14c-2-1-4-1-6 0M12 14c2-1 4-1 6 0",
+  drop: "M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z",
+  mortar: "M4 13h16a8 8 0 0 1-16 0zM9 9l7-6M8 21h8",
+  sprout: "M12 21V11M12 11c-1-4-4-6-8-6 0 4 3 7 8 6zM12 11c1-4 4-6 8-6 0 4-3 7-8 6z",
+  hairStrand: "M12 3c-2 4-2 8 0 12s0 6-2 6M14 21c2-3 2-6 0-9",
+  globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
+  shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
+  shieldCheck: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM8.5 12l2.5 2.5 4.5-5",
+  lock: "M5 11h14v10H5zM8 11V8a4 4 0 0 1 8 0v3",
+  cash: "M2 6h20v12H2zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  truck: "M3 6h11v10H3zM14 10h4l3 3v3h-7M7 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM17 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  invoice: "M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3",
+  checkCircle: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM8 12l3 3 5-6",
+  bag: "M5 8h14l-1 13H6L5 8zM9 8V6a3 3 0 0 1 6 0v2",
+  bolt: "M13 2L4 14h7l-1 8 9-12h-7z",
+  heart: "M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z",
+  zoom: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4M11 8v6M8 11h6",
+  arrowRight: "M0 6h24M19 1l5 5-5 5",
+  fallingHair: "M8 20c0-6 2-12 8-16M12 20c0-4 1-8 4-10",
+  roots: "M12 3v8M12 11l-5 9M12 11l5 9M12 14l-3 7M12 14l3 7",
+  scalp: "M12 3s5 6 5 9a5 5 0 0 1-10 0c0-3 5-9 5-9zM4 21h16",
+  shieldPlus: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM12 8v9",
+};
+

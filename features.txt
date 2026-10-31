@@ -1,0 +1,737 @@
+================================================================================
+  ALIMENTURES — COMPLETE FEATURE INVENTORY (FRONTEND + BACKEND)
+  Reference blueprint for the next project
+  Source: Alimentures_FE-main (React/Vite) + Alimentures_BE-main (Express/Firestore)
+  Generated: 2026-10-02
+================================================================================
+
+CONTENTS
+  0. Tech Stack Overview
+  1. Roles & Access Model
+  --- FRONTEND ---
+  2.  App Shell, Routing & Layouts
+  3.  Authentication Screens
+  4.  Customer Storefront
+  5.  Cart, Wishlist & Checkout
+  6.  Orders, Tracking & Reviews
+  7.  Account (Addresses, Notifications)
+  8.  Live Support Chat Widget
+  9.  Staff Panel
+  10. Admin Panel
+  11. Analytics, Cookie Consent & Privacy
+  12. SEO, Performance & UX Polish
+  13. Shared UI Components & Utilities
+  14. Frontend Security & Deployment
+  --- BACKEND ---
+  15. Server Core & Platform
+  16. Authentication & User Management
+  17. Products, Catalogue & Search
+  18. Cart, Coupons & Wishlist
+  19. Orders, Payments, Stock Reservations & Refunds
+  20. Delivery / PIN-code Engine & India Locations
+  21. Reviews & Ratings
+  22. Real-time Chat (Socket.IO)
+  23. Notifications & Transactional Email / Invoices
+  24. CMS: Hero Slides, Super Grains, Appearance, Settings
+  25. Analytics (Web + Sales)
+  26. Security Hardening
+  27. Observability, Reliability & Ops
+  28. Scripts & Scheduled Jobs
+  29. Full REST API Reference
+  30. Environment Variables
+  31. Data Model (Firestore Collections)
+
+
+================================================================================
+0. TECH STACK OVERVIEW
+================================================================================
+FRONTEND
+  - React 19 + Vite 8, React Router 7 (data router, lazy-loaded routes)
+  - Tailwind CSS 3 + class-variance-authority + tailwind-merge + clsx
+  - Radix UI primitives (dialog, dropdown, popover, select, tabs, tooltip,
+    radio-group, label, separator, slot) — shadcn-style component layer
+  - Animation: Framer Motion, GSAP (+ ScrollTrigger), Lenis smooth scroll
+  - Embla carousel, Vaul drawers, Sonner toasts, Lucide icons
+  - Recharts (dashboards), react-day-picker, input-otp
+  - Export: ExcelJS, jsPDF + html2canvas (lazy-loaded on demand)
+  - socket.io-client (live chat), react-helmet-async (SEO)
+  - Hosted on Netlify (SPA redirects, security headers, sitemap generation)
+
+BACKEND
+  - Node 20+, Express 5
+  - Firebase Admin SDK (Firestore DB + Firebase Auth); no client Firebase SDK
+  - Razorpay (orders, checkout verify, webhooks, refunds)
+  - Socket.IO 4 (real-time support chat)
+  - Nodemailer (SMTP; Ethereal test inbox fallback in dev)
+  - PDFKit (GST invoice PDFs)
+  - Helmet, CORS, express-rate-limit, Morgan, uuid, OpenTelemetry API
+  - Hosted on Render (with Render Cron for scheduled jobs)
+
+
+================================================================================
+1. ROLES & ACCESS MODEL
+================================================================================
+  - Roles: admin, staff, customer (always lowercase; normalised at boundary)
+  - Guest (anonymous): browse home/shop/product, local cart & wishlist,
+    policies, about
+  - Customer: checkout, orders, addresses, reviews, chat, notifications
+  - Staff: dashboard, orders (fulfilment status), inventory (full product
+    CRUD + stock), support desk chats (accept-queue model)
+  - Admin: everything staff can do + users, roles, coupons, analytics,
+    reviews moderation, CMS (hero slides, super grains, appearance),
+    PIN-code delivery config, refunds, support inbox (any chat)
+  - Frontend ProtectedRoute with allowedRoles per route
+  - Backend middlewares: verifyToken, optionalAuth, isStaff, isAdmin,
+    cronOrAdmin
+  - Deactivated (isActive=false) accounts rejected at token verification
+
+
+################################################################################
+#                               FRONTEND FEATURES                              #
+################################################################################
+
+================================================================================
+2. APP SHELL, ROUTING & LAYOUTS
+================================================================================
+  - Centralised route table (routes.jsx) with React.lazy + Suspense
+    "Loadable" wrapper for every page (code splitting)
+  - Route-level errorElement (RouteError) for render errors & failed
+    lazy-chunk loads
+  - Global ErrorBoundary ("Something went wrong" fallback) that reports to
+    the backend /api/client-errors
+  - 404 NotFound page (catch-all route)
+  - Three layouts:
+      * CustomerLayout — header, search w/ autocomplete, cart/wishlist
+        badges, notification bell, footer (social links, newsletter signup
+        with email validation), chat widget, cookie consent
+      * StaffLayout — sidebar/drawer nav, mobile drawer auto-close on route
+        change, light/dark theme toggle persisted in localStorage
+      * AdminLayout — sidebar nav, mobile menu, theme toggle, static
+        background (no infinite animations for GPU savings)
+  - Route map:
+      Public:   /login /register /forgot-password /reset-password
+      Customer: /  /shop  /cart  /product/:id  /wishlist  /policies
+                /policies/:slug  /checkout* /orders* /addresses*
+                (* = protected: customer|admin)
+      Staff:    /staff  /staff/orders  /staff/inventory  /staff/chats
+      Admin:    /admin  /admin/products  /admin/super-grains  /admin/orders
+                /admin/users  /admin/analytics  /admin/reviews
+                /admin/chats  /admin/hero-slides  /admin/appearance
+                /admin/cookies-analytics  /admin/coupon-codes
+                /admin/pincode-delivery
+  - Hash-segment scrolling & scroll-to-top on route change; browser scroll
+    restoration disabled for controlled behaviour
+
+================================================================================
+3. AUTHENTICATION SCREENS
+================================================================================
+  - Shared AuthScaffold (brand panel w/ admin-customisable background image)
+  - Register: full name, email, password; email OTP verification step;
+    password strength rule (8+ chars, uppercase, etc.); resend-OTP timer
+  - Login: two-step — email+password, then 6-digit emailed OTP (input-otp);
+    back-compat path if server returns a token directly; role-based redirect
+    (admin → /admin, staff → /staff, customer → /)
+  - Forgot Password: request reset code (non-enumerating "if that account
+    exists" message); resend with cooldown
+  - Reset Password: email + OTP + new password + confirm; mismatch & length
+    validation
+  - useOtpTimer hook for resend countdowns
+  - Session stored in localStorage (token, role, userEmail, userName)
+  - Global 401 handling → "Session expired" toast + forced logout;
+    403 keeps session and surfaces message
+
+================================================================================
+4. CUSTOMER STOREFRONT
+================================================================================
+HOME (largest page)
+  - Hero banner carousel from CMS (admin-managed slides), cached in
+    localStorage, images preloaded to avoid transition lag
+  - Category bar with horizontal scroll controls; category rows
+  - Featured products section (isFeatured filter)
+  - Brand story sections ("Crafting Grains Into Gold" 0% pledge,
+    "Powered by Ancient Super Grains" nutritional blueprint, "Our
+    Commitment" statement, "Food you can trust", sustainability)
+  - Super Grains showcase (CMS-driven)
+  - New-arrival poster (from admin settings)
+  - Quick-add modal (VariantSelectorModal) for cart or wishlist
+  - GSAP scroll-triggered entrance animations, floating ambient blobs,
+    glassmorphism styles, image lazy-loading
+  - Admin-customisable section backgrounds (useAppearance) with bundled
+    fallbacks
+  - Dynamic SEO per page
+
+SHOP / PRODUCT DISCOVERY
+  - Dedicated /shop with URL-state driven filters (shareable URLs)
+  - Server-side search with typo tolerance (Levenshtein fuzzy matching)
+  - Filters: category, min/max price, in-stock only
+  - Sort: relevance, price low→high, price high→low, newest
+  - Paginated results (hasMore)
+  - Debounced fetching + AbortController to cancel stale requests
+  - Mobile filter drawer
+  - Empty state ("No products found") and error state with retry
+  - Header autocomplete search
+  - Skeleton loaders (grid / card)
+
+PRODUCT DETAILS
+  - Gallery (primary / secondary / tertiary images)
+  - Variant selector (pack size/weight with its own price & stock);
+    quantity reset on variant change; out-of-stock handling
+  - Description + secondary description, nutrition facts, ingredients,
+    origin, shelf life, clean promises / clean badges, discount %
+  - Add to cart / Add to wishlist (login prompts for guests)
+  - Coupon preview/apply on product page
+  - Customer Reviews section (verified-purchase reviews, rating aggregate)
+  - "You May Also Like" related products (same category/tags)
+  - "Recently Viewed" (localStorage, capped list)
+  - JSON-LD structured data (schema.org Product, InStock/OutOfStock,
+    NewCondition) + canonical URL by slug
+  - "Product Not Found" state
+
+OTHER CONTENT PAGES
+  - About page (mission, values, floating ingredient chips, farming
+    community story)
+  - Policies hub + per-slug pages: privacy-policy, terms-of-service,
+    shipping-policy, returns-refunds, cancellation-policy,
+    quality-guidelines ("Policy not found" fallback)
+  - FAQ sections on Cart, Wishlist and Order pages
+
+================================================================================
+5. CART, WISHLIST & CHECKOUT
+================================================================================
+CART (CartContext)
+  - Global CartProvider/useCart; cart & wishlist persisted in localStorage
+  - Optimistic updates
+  - Server-side cart validation (/api/cart/validate) for price/stock drift
+  - Quantity limits (1–50 per item)
+  - Coupon apply/remove with states (loading/success/error)
+  - Shipping shown as "calculated at checkout" (PIN-code dependent)
+  - Upsell "Add a little more" section, empty-cart state, Cart FAQs
+  - Login required to checkout
+
+WISHLIST
+  - Add/remove, "Move to cart", empty state, FAQs, brand standards block
+
+CHECKOUT
+  - Multi-step indicator (CheckoutSteps)
+  - Saved-address picker; auto-prefill from default address
+  - India State → City dependent dropdowns (SearchableSelect), invalid city
+    dropped on state change
+  - PIN-code → live delivery options (debounced): Standard vs Fastest, ETA,
+    fee, free-delivery threshold (display only; server recomputes)
+  - Geolocation "use my location" with embedded Google Maps preview
+  - Coupon applied to order
+  - Razorpay Checkout integration (script loaded on demand)
+  - Payment verification flow + error toasts (failed / verification error)
+  - Abandon-payment: releases stock reservation immediately if user
+    closes Razorpay or payment fails
+  - Idempotent order submission (no duplicate orders on double click)
+
+================================================================================
+6. ORDERS, TRACKING & REVIEWS
+================================================================================
+  - "Track your order" page: current + previous orders
+  - Visual status timeline: pending → processing → packed → shipped →
+    out_for_delivery → delivered (+ cancelled / refunded / payment states)
+  - Order details: items, totals, discount, delivery fee/method, address
+  - Post-delivery feedback = product review (one rating + comment per item),
+    tracks already-reviewed (orderId, productId) pairs
+  - "Chat with support" button opens chat widget via custom event
+  - No-orders empty state, Order FAQs, skeleton loader
+
+================================================================================
+7. ACCOUNT (ADDRESSES, NOTIFICATIONS)
+================================================================================
+  - My Addresses: list, add, edit, delete, set default; fields fullName,
+    phone, street, state (dropdown), city (dropdown), pincode
+  - NotificationCenter bell: list, unread state, mark-as-read, auto-refresh
+    every 30s
+
+================================================================================
+8. LIVE SUPPORT CHAT WIDGET (CUSTOMER)
+================================================================================
+  - Floating widget mounted once at layout level ("Alimenture Support")
+  - Socket.IO connection authenticated with the user's token
+  - Ticket model: create/init chat, auto-resume an open ticket, full ticket
+    history fetched on first open (never "forgets" closed chats)
+  - Live status updates when staff close/reopen a ticket
+  - Reopen closed tickets; warning before leaving an open session
+  - Auto-scroll, rate-limit error messages ("sending too fast")
+  - Openable from other pages via a window custom event
+
+================================================================================
+9. STAFF PANEL
+================================================================================
+  - Dashboard: KPIs, real 7-day order volume chart, variant-aware low-stock
+    health (Healthy / Low / Critical) pie
+  - Orders: list, filter, detail modal, fulfilment status updates (per
+    allowed transitions), Google Maps links for delivery coordinates /
+    address search
+  - Inventory: same full catalogue CRUD as admin (create/edit/delete,
+    variants, stock updates, images with canvas compression), debounced
+    search, Excel export
+  - Support Desk: Pending queue → Accept → Active chats; customer details
+    side panel; close/reopen tickets
+
+================================================================================
+10. ADMIN PANEL
+================================================================================
+DASHBOARD
+  - KPIs: total revenue, total orders, customers, active products
+  - Charts (Recharts): sales trend, category distribution, low stock
+
+PRODUCTS ("Inventory.")
+  - Full CRUD with draft / private / featured flags
+  - Multi-variant editor (weight, price, stock per variant; ≥1 required)
+  - Up to 3 images + gallery; client-side canvas compression to fit the
+    900 KB server limit; 5 MB raw file guard; PNG/JPEG/WebP only
+  - Tags, badges, nutrition, ingredients, origin, shelf life, clean
+    promises, SKU, slug, discount %
+  - Internal fields (cost, margin, supplier, notes) hidden from public
+  - Debounced search, Excel export
+
+SUPER GRAINS
+  - CRUD for "Ancient Super Grains" content cards with images
+
+ORDERS ("Orders.")
+  - Paginated list, filters (status, payment method, search)
+  - Deep-link ?orderId= opens detail modal directly
+  - Status update, refund action (from shipped/out_for_delivery/delivered)
+  - Map embed / Google Maps links for customer coordinates
+  - Export to CSV and Excel
+
+USERS ("Accounts.")
+  - Cursor-paginated list with back navigation, dedupe by UID
+  - Create user (admin-create), change role, activate/deactivate,
+    soft delete, hard delete
+  - Excel export
+
+ANALYTICS ("Insights.")
+  - Avg order value, revenue growth & orders by month, category
+    distribution, new vs returning customers, conversion rate, retention
+  - Export to PDF
+
+COOKIES / WEB ANALYTICS
+  - Range selector; KPI cards: page views, active now (polled every 30s),
+    avg session, pages/session, bounce rate, avg duration
+  - Consent stats: total consents, accept all, essential only, analytics on
+  - Core Web Vitals: avg LCP, FCP, CLS, TTFB
+  - Devices, traffic sources (UTM/referrer), top pages, events
+  - Custom tooltips, empty states, CSV export
+
+REVIEWS
+  - View all reviews joined with product + order info; delete spam
+  - "View order" deep-link into Orders
+
+SUPPORT INBOX (CHATS)
+  - Admin can join/reply to any conversation regardless of status;
+    customer details panel
+
+HERO SLIDES
+  - CRUD homepage banners: image upload (compressed) or URL, title,
+    subtitle, CTA text/link, order
+
+APPEARANCE ("Templates")
+  - Per-slot background image management (auth panel, homepage sections,
+    catalog category backgrounds); live preview of bundled fallback;
+    upload/reset
+
+COUPON CODES
+  - Generate coupon (prefix + random code), percentage or flat discount,
+    min order value, expiry, usage limits
+  - Filter all / active / inactive, toggle, delete
+
+PIN-CODE DELIVERY
+  - Summary cards; tabs: pincodes | standard | fastest
+  - Global settings: default fee & ETA, free-delivery toggle & threshold,
+    fastest delivery toggle/fee/ETA/cutoff time, min/max order value,
+    "deliver to unlisted PIN codes"
+  - Per-PIN rules: city/state, availability, fees, ETAs, note
+  - Debounced search, status toggle, bulk actions, CSV import/export
+
+================================================================================
+11. ANALYTICS, COOKIE CONSENT & PRIVACY (FRONTEND)
+================================================================================
+  - Cookie consent banner + "Customize" panel (essential / analytics);
+    re-openable via useCookieSettings hook; delayed to not block first render
+  - First-party analytics library (lib/analytics.js):
+      * Visitor ID + session ID
+      * Consent-gated: events queued pre-consent, flushed on consent
+      * Page views on route change (dedupe same URL within 2s), time-on-page
+      * Sessions (page count, end on unload via beacon)
+      * Auto click tracking + custom events
+      * UTM params & referrer capture
+      * Device / browser / OS detection
+      * Core Web Vitals (LCP, FCP, CLS, TTFB) sent only if consent granted
+      * Identify logged-in user; silent-fail (never breaks UX)
+  - Consent record always sent (allowed without consent)
+
+================================================================================
+12. SEO, PERFORMANCE & UX POLISH
+================================================================================
+  - SEO component (react-helmet-async): title, description, canonical, OG
+  - JSON-LD product schema
+  - sitemap.xml generated at build (scripts/generate-sitemap.js), robots.txt
+  - Code splitting per route; heavy export libs lazy-loaded
+  - In-memory SWR cache for GET requests (cachedFetch) with stale fallback
+    on network errors; clearApiCache
+  - Skeleton loaders: app, product grid/card/details, cart, wishlist,
+    orders, profile, address, dashboard, table, reviews
+  - useSkeletonLoader hook (avoid flicker)
+  - ImageWithFallback component
+  - Lenis smooth scrolling, GSAP, Framer Motion page/element motion,
+    ParticleCanvas decorative effect
+  - Sonner toasts everywhere; responsive/mobile-first layouts & drawers
+  - Light/dark theme toggle in staff/admin panels
+
+================================================================================
+13. SHARED UI COMPONENTS & UTILITIES
+================================================================================
+  - ui/: button, badge, card, dialog, input, label, loader, motion,
+    radio-group, select, tabs, table, textarea, sonner, SearchableSelect,
+    ProductCard, CheckoutSteps, ParticleCanvas
+  - VariantSelectorModal, ProtectedRoute, SEO, ErrorBoundary,
+    NotificationCenter, ChatWidget, CookieConsent, AuthScaffold
+  - lib/api.js: API_BASE, getToken, authenticatedFetch, cachedFetch,
+    logout, clearApiCache
+  - lib/deliveryApi.js, lib/appearance.js (useAppearance + cache)
+  - lib/exportUtils.js: exportToCSV, exportToExcel, exportToPDF
+  - lib/reportError.js: client error reporting (with VITE_RELEASE)
+  - data/indiaStates.js, data/policies.js
+
+================================================================================
+14. FRONTEND SECURITY & DEPLOYMENT
+================================================================================
+  - Netlify: build with sitemap, SPA fallback (_redirects + netlify.toml)
+  - Security headers: HSTS (preload), X-Content-Type-Options, X-Frame-Options
+    DENY, Referrer-Policy, Permissions-Policy, COOP, strict CSP
+    (script-src self + Razorpay; connect-src API/WSS/Razorpay; frame-src
+    Razorpay + Google Maps)
+  - No Firebase client SDK — all auth goes through backend
+  - Env: VITE_API_URL, VITE_APP_URL, VITE_RELEASE (optional)
+
+
+################################################################################
+#                               BACKEND FEATURES                               #
+################################################################################
+
+================================================================================
+15. SERVER CORE & PLATFORM
+================================================================================
+  - Boot-time env validation (fail fast; extra required vars in production)
+  - Warns loudly if SMTP not configured
+  - trust proxy hops configurable (TRUST_PROXY_HOPS) for real client IP
+  - Helmet with CSP allowing Razorpay
+  - Server-generated X-Request-ID per request (inbound header ignored)
+  - Morgan access log with request id
+  - CORS allow-list (fail closed), env-driven
+  - Raw body for Razorpay webhook (HMAC), larger JSON limit (3 MB) only on
+    image-carrying routes, 256 KB default
+  - Global rate limiter on /api + per-route limiters
+  - /health endpoint with real Firestore round-trip (ok / degraded 503)
+  - 404 + centralised error handler (no stack traces leaked, requestId on
+    every response)
+  - Socket.IO server sharing CORS config; io exposed to REST routes
+  - Process safety nets (unhandledRejection, uncaughtException → exit)
+  - Graceful shutdown on SIGTERM/SIGINT with 10s force timeout
+  - App exported for tests (listen only when run directly)
+
+================================================================================
+16. AUTHENTICATION & USER MANAGEMENT
+================================================================================
+  - Firebase Auth via Identity Toolkit REST (signInWithPassword) server-side
+  - Registration with email OTP verification
+  - Login = password + mandatory emailed OTP (2FA for every role);
+    pending session stored server-side until OTP verified
+  - Per-account login lockout (8 attempts → 15 min) on top of IP limiter
+  - OTP system: crypto-strong 6 digits, stored as sha256(otp + pepper),
+    10-min TTL, 5 attempts → 15-min lock, transactional counter,
+    timing-safe compare
+  - Password reset via OTP (non-enumerating responses)
+  - Logout (token revocation)
+  - Auto-create missing Firestore profile for existing Auth users
+  - Shared token verifier for HTTP + Socket.IO; short-TTL (60s) user cache
+    with invalidation on role/status change
+  - User profile get/update (whitelisted fields: name, phone, photoURL,
+    preferences)
+  - Admin: list users (paginated), create user, set role, toggle active,
+    soft delete, hard delete — all audit-logged
+
+================================================================================
+17. PRODUCTS, CATALOGUE & SEARCH
+================================================================================
+  - CRUD (staff/admin) with mass-assignment whitelist (WRITABLE_FIELDS)
+  - Fields: title/name, slug, sku, category, descriptions, price, stock,
+    variants[], images (3 slots + gallery), isFeatured, isDraft, isPrivate,
+    tags, nutrition/nutritionFacts, ingredients, weight, discountPercent,
+    badges, origin, shelfLife, cleanPromises, cleanBadges
+  - Internal fields (cost, margin, supplier, notes) stripped on public reads
+  - optionalAuth: staff get richer payload, public gets filtered
+  - Variant-level stock; dedicated stock update endpoint
+  - Low-stock endpoint for dashboards
+  - Search: in-memory cached catalogue (10-min TTL, cap 2000), fuzzy
+    Levenshtein typo tolerance, relevance scoring, category/price/in-stock
+    filters, sorting, pagination, query length cap
+  - Base64 image validation (MIME allow-list, magic-byte sniffing, 900 KB
+    cap, http(s) URLs accepted)
+  - Audit log on create/update/delete/stock
+
+================================================================================
+18. CART, COUPONS & WISHLIST
+================================================================================
+  - Cart validation endpoint: re-prices and re-checks stock server-side
+  - Coupons: admin generate (prefix + random code), percentage (≤100) or
+    flat, min order value, expiry, active toggle, delete, usage limits
+  - Coupon validate endpoint (rate-limited)
+  - Per-user redemption tracking (couponId_uid); consumed inside order
+    transaction (no over-redeem), "pending" until payment, released if
+    payment never completes
+  - Wishlist get/add/remove (batched reads, no N+1)
+
+================================================================================
+19. ORDERS, PAYMENTS, STOCK RESERVATIONS & REFUNDS
+================================================================================
+  - Order state machine: payment_pending, payment_successful_no_stock,
+    pending, processing, packed, shipped, out_for_delivery, delivered,
+    cancelled, refunded — with explicit allowed transitions
+  - Create order: authoritative server subtotal (items built from product
+    docs, never client), server-side delivery fee, coupon discount,
+    sanitised customer info
+  - Firestore transaction: stock check per variant, decrement, coupon
+    consume, order + stock reservation (10 min) creation
+  - Idempotency key claimed in-transaction (no duplicate orders)
+  - Razorpay: create order, client verify (signature), webhook (HMAC raw
+    body, event de-dup, payment.captured confirmation, dashboard refund
+    reconciliation)
+  - Abandon-payment endpoint releases reservation immediately
+  - Reservation cleanup endpoint (cron secret or admin) for expired holds
+  - Order reads: all (staff, filters + pagination), by email, my orders,
+    by id (owner or staff)
+  - Status update (staff) with transition validation, notifications, emails
+  - Refund (admin only) via Razorpay, from refundable states; reverses
+    sales analytics
+  - Sharded sales analytics increments/decrements in the same transaction
+
+================================================================================
+20. DELIVERY / PIN-CODE ENGINE & INDIA LOCATIONS
+================================================================================
+  - Delivery resolver priority: PIN fastest → PIN standard → global fastest
+    → global standard → unavailable
+  - Methods: standard, fastest; fee clamped 0–5000
+  - Global settings (cached 60s): default fee/ETA, free delivery threshold,
+    fastest fee/ETA/cutoff, min/max order value, serviceByDefault
+  - Indian PIN validation (6 digits, no leading zero)
+  - Admin: summary, list/search, create (single or bulk items), update,
+    status toggle, delete, bulk actions, CSV import/export (5000 rows max)
+    — audit-logged
+  - Public: states list, cities by state (search, limit), PIN info,
+    delivery options for PIN + subtotal
+  - India state/city dataset trimmed into committed JSON (~49 KB), city ↔
+    state membership validation
+
+================================================================================
+21. REVIEWS & RATINGS
+================================================================================
+  - Create/update/delete own review (rate-limited), title ≤100,
+    comment ≤1000 chars
+  - Verified purchase via post-delivery flow; live immediately
+  - Product reviews listing (public); my reviews
+  - Product rating aggregate recomputed after changes (eventually
+    consistent)
+  - Admin listing (joined with product + order) and delete — audit-logged
+
+================================================================================
+22. REAL-TIME CHAT (SOCKET.IO)
+================================================================================
+  - Handshake auth with Firebase ID token (connection refused otherwise)
+  - Events: join_chat, send_message, receive_message, chat_error
+  - Access control: participant or staff/admin only
+  - Per-socket token bucket rate-limit (10 burst, 1/sec refill)
+  - Message length cap 2000; sender identity from verified socket only
+  - History limit 500 messages; closed tickets reject messages
+  - REST: init chat, my chats, session by id, close, reopen (pushes socket
+    events), admin all chats, staff pending queue, accept chat, my active
+
+================================================================================
+23. NOTIFICATIONS & TRANSACTIONAL EMAIL / INVOICES
+================================================================================
+  - In-app notifications: list, mark read; created on new paid order
+    (staff/admin), payment success, status updates, refunds
+  - Branded responsive HTML emails (table-based) for order events: placed,
+    paid, status change (with progress tracker), cancelled, refunded
+  - Product images attached inline via cid: (Gmail-safe)
+  - Fire-and-forget sending (never blocks responses)
+  - GST invoice PDF (PDFKit) auto-attached on delivery
+  - OTP emails (register, login, password reset)
+  - Mailer: SMTP, Ethereal test inbox in dev
+
+================================================================================
+24. CMS: HERO SLIDES, SUPER GRAINS, APPEARANCE, SETTINGS
+================================================================================
+  - Hero slides CRUD (src, title, subtitle, ctaText, ctaLink, order) with
+    validate() schema + image validation
+  - Super grains CRUD with validation + image
+  - Appearance slots (whitelisted keys: authBg, featuredBg, craftingBg,
+    superGrainsBg, commitmentBg, catalog category backgrounds…) with
+    label/group/hint/aspect ratio; 60s in-process cache invalidated on write
+  - Site settings (e.g. newArrivalPoster) get/update
+
+================================================================================
+25. ANALYTICS (WEB + SALES)
+================================================================================
+  - Ingest endpoints (rate-limited + daily per-IP cap): pageview, event,
+    session, consent, performance; ping
+  - Opaque hashed session doc IDs (can't overwrite another visitor)
+  - Payload sanitising
+  - Admin reads: overview, pageviews, events, consent stats, devices,
+    traffic sources, performance (Web Vitals), active visitors
+  - Sales: overview, trend (daily/monthly, IST), top products, category
+    distribution
+  - Sharded counters (10 shards) to avoid hot-document write limits
+  - Read cap (8000 docs) per dashboard query with `capped` flag
+  - Retention script purges raw docs > 90 days
+
+================================================================================
+26. SECURITY HARDENING
+================================================================================
+  - Named rate limiters: auth, otp (email+IP keyed), order, coupon, review,
+    chat, analytics, analytics-daily, write, client-error; uid-or-IP
+    keying; IPv6 /56 normalisation
+  - Mass-assignment defence everywhere (whitelists, validate() drops
+    unknown keys)
+  - Dependency-free validate(schema) middleware (types, enums, arrays,
+    min/max, defaults, trim)
+  - Image upload validation with magic-byte sniffing
+  - Server-authoritative pricing, delivery fee, discounts
+  - Webhook HMAC verification; timing-safe secret compare for cron
+  - Audit log service (adminId, email, action, resource, prev/new state, IP)
+  - Generic 5xx messages; opt-in public 4xx messages only
+
+================================================================================
+27. OBSERVABILITY, RELIABILITY & OPS
+================================================================================
+  - Structured JSON-line logger with levels (debug/info/warn/error/silent)
+  - Error forwarding to webhook (Slack/Discord/Better Stack), size-capped
+  - Client error intake endpoint (always 204) feeding the same logger
+  - resilientQuery: falls back to in-memory sort if Firestore composite
+    index missing (FAILED_PRECONDITION)
+  - asyncHandler wrapper for async routes
+  - Health checks for Render
+
+================================================================================
+28. SCRIPTS & SCHEDULED JOBS
+================================================================================
+  - simulate-webhook.js: signed Razorpay webhook simulator
+    (payment.captured, refund.processed)
+  - analytics-retention.js: daily purge (dry-run mode, bounded deletes)
+  - backfill-analytics.js: rebuild sales analytics (dry-run / execute)
+  - gen-india-locations.js: regenerate India state/city JSON
+  - Render Cron → POST /api/orders/cleanup-reservations (X-Cron-Secret)
+
+================================================================================
+29. FULL REST API REFERENCE  (base: /api)
+================================================================================
+USERS  /users
+  POST   /send-otp                 register OTP
+  POST   /register                 create account
+  POST   /login                    password step
+  POST   /login/verify-otp         OTP step → token
+  POST   /request-reset            reset OTP
+  POST   /reset-password
+  POST   /logout                   [auth]
+  GET    /                         [admin] list
+  GET    /:uid                     [auth]
+  PUT    /:uid                     [auth]
+  PATCH  /toggle-status/:uid       [admin]
+  PATCH|PUT /:uid/role             [admin]
+  POST   /admin-create             [admin]
+  PATCH  /soft-delete/:uid         [admin]
+  DELETE /:uid                     [admin]
+
+PRODUCTS  /products
+  GET    /  /search  /:id          [public, optionalAuth]
+  GET    /low-stock                [staff]
+  POST   /   PUT /:id   PATCH /:id/stock   DELETE /:id   [staff]
+
+ORDERS  /orders
+  POST   /                         [auth] create
+  GET    /                         [staff]
+  GET    /user/:email              [staff]
+  GET    /my-orders  /:id          [auth]
+  PUT    /:id/status               [staff]
+  PUT    /:id/abandon-payment      [auth]
+  POST   /:id/refund               [admin]
+  POST   /razorpay/verify          [auth]
+  POST   /razorpay/webhook         [Razorpay HMAC]
+  POST   /cleanup-reservations     [cron secret or admin]
+
+CART      POST /cart/validate
+COUPONS   POST /coupons/generate, GET /coupons, DELETE /coupons/:id,
+          PATCH /coupons/:id/toggle [admin]; POST /coupons/validate [auth]
+WISHLIST  GET / POST /wishlist, DELETE /wishlist/:id [auth]
+ADDRESSES GET / POST /addresses, PUT/DELETE /addresses/:id,
+          PATCH /addresses/:id/default [auth]
+REVIEWS   GET /reviews/product/:productId; GET /reviews/mine,
+          POST /reviews, PUT/DELETE /reviews/:id [auth];
+          GET /reviews/admin, DELETE /reviews/admin/:id [admin]
+NOTIFS    GET /notifications, PUT /notifications/:id/read [auth]
+CHAT      POST /chat/init, GET /chat/my-chats, GET /chat/session/:chatId,
+          PUT /chat/:chatId/close|reopen [auth];
+          GET /chat/admin/all [admin];
+          GET /chat/staff/pending|active, POST /chat/staff/accept/:chatId [staff]
+DELIVERY  GET /delivery/locations/states, /locations/cities,
+          /pincode/:pincode, /options/:pincode
+ADMIN DELIVERY /admin/delivery  [admin]
+          GET /summary, GET|PUT /settings, GET /pincodes/export,
+          POST /pincodes/import, POST /pincodes/bulk, GET|POST /pincodes,
+          PUT /pincodes/:pincode, PATCH /pincodes/:pincode/status,
+          DELETE /pincodes/:pincode
+SETTINGS  GET /settings; POST /settings [admin]
+SUPER GRAINS GET /super-grains; POST, PUT /:id, DELETE /:id [admin]
+HERO SLIDES  GET /hero-slides; POST, PUT /:id, DELETE /:id [admin]
+APPEARANCE   GET /appearance; GET /appearance/slots, PUT|DELETE /:key [admin]
+ANALYTICS    GET /analytics/ping; POST /pageview|event|session|consent|performance;
+             GET /overview|pageviews|events|consent-stats|devices|
+             traffic-sources|performance|active-visitors|sales-overview|
+             sales-trend|top-products|category-dist [admin]
+CLIENT ERRORS POST /client-errors
+HEALTH        GET /health,  GET /
+
+================================================================================
+30. ENVIRONMENT VARIABLES
+================================================================================
+BACKEND
+  PORT, NODE_ENV, CORS_ORIGIN, TRUST_PROXY_HOPS
+  FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_WEB_API_KEY
+  RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+  SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
+  OTP_PEPPER, RESERVATION_CLEANUP_SECRET
+  LOG_LEVEL, ERROR_WEBHOOK_URL
+  GLOBAL_RATE_MAX, ANALYTICS_DAILY_MAX, ANALYTICS_RETENTION_DAYS,
+  ANALYTICS_RETENTION_MAX_DELETES, DOMAIN
+FRONTEND
+  VITE_API_URL, VITE_APP_URL, VITE_RELEASE
+
+================================================================================
+31. DATA MODEL (FIRESTORE COLLECTIONS)
+================================================================================
+  users, products, orders, stockReservations, idempotency keys,
+  coupons, coupon redemptions, wishlist, addresses, reviews,
+  notifications, chats (+ messages), heroSlides, superGrains,
+  appearanceAssets, settings, deliverySettings, deliveryPincodes,
+  register/login/reset OTP collections, login lockouts, pending login
+  sessions, auditLogs, analytics raw collections (pageviews, events,
+  sessions, performance), analytics_consents, analytics_sales_* (sharded),
+  analytics_products_lifetime, _hea
+================================================================================
+  IDEAS TO CARRY FORWARD / IMPROVE IN THE NEXT PROJECT
+================================================================================
+  - Move images from inline base64 in Firestore to object storage + CDN
+  - Replace in-memory search with a search service (Typesense/Algolia/Meili)
+    once the catalogue grows past ~2000 items
+  - Pre-aggregate web analytics instead of capped raw reads
+  - Add TypeScript, automated tests (unit + API + e2e), CI pipeline
+  - Add Sentry (hook already in logger.forwardError)
+  - COD / additional payment methods, order cancellation by customer
+  - Multi-language support (chatbot knowledge base already lists en/ta/hi)
+  - WhatsApp / Instagram support channels (listed in chatbot knowledge)
+================================================================================

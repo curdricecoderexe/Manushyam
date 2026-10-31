@@ -1,0 +1,43 @@
+# Netlify site for the storefront (set the site's base directory to FE).
+# Replace api.manushyam.com below if the API lives elsewhere; VITE_API_URL must match it.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# The sitemap is built by the API from the live catalogue, so new products and articles appear without
+# a redeploy. Served from the storefront's own domain, as search engines expect.
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "https://api.manushyam.com/api/seo/sitemap.xml"
+  status = 200
+  force = true
+
+# Single-page app: every other path is rendered by the client router (404s included).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), usb=(), payment=(self \"https://checkout.razorpay.com\" \"https://api.razorpay.com\")"
+    # Razorpay Checkout opens its own popups/redirects, so the opener is kept for popups only.
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+    # No inline scripts anywhere (the build has none; JSON-LD blocks are data, not script).
+    # Inline style attributes are used by React components, so style-src keeps 'unsafe-inline'.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://checkout.razorpay.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://res.cloudinary.com https://*.razorpay.com; connect-src 'self' https://api.manushyam.com wss://api.manushyam.com https://*.razorpay.com https://challenges.cloudflare.com; frame-src https://api.razorpay.com https://checkout.razorpay.com https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+
+# Hashed build files never change: cache them for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

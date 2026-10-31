@@ -1,0 +1,519 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Semantic tokens (getdesign.md §1.2). Tailwind colours above are the palette; these are the roles. */
+:root {
+  --bg: #fbf6ee;
+  --surface: #f7efe3;
+  --text-strong: #2a1608;
+  --text: #4a3f36;
+  --text-muted: #7a6c60;
+  --text-gold: #8e5a1c;
+  --primary: #a8722a;
+  --secondary: #7a3a12;
+  --success: #1e5c36;
+  --border: #e6d5bd;
+  /* Palette as RGB channels for tailwind.config.js (rgb(var(--c-…) / alpha)). */
+  --c-cocoa-800: 78 44 12;
+  --c-cocoa-900: 42 22 8;
+  --c-cocoa-950: 20 13 7;
+  --c-brown-600: 138 72 30;
+  --c-brown-700: 122 58 18;
+  --c-brown-800: 98 41 10;
+  --c-gold-50: 251 243 230;
+  --c-gold-100: 246 234 218;
+  --c-gold-300: 227 201 160;
+  --c-gold-400: 217 181 122;
+  --c-gold-500: 201 148 74;
+  --c-gold-600: 168 114 42;
+  --c-gold-700: 142 90 28;
+  --c-leaf-50: 234 242 236;
+  --c-leaf-800: 30 92 54;
+  --c-leaf-900: 22 74 43;
+  --c-cream-50: 253 249 243;
+  --c-cream-100: 251 246 238;
+  --c-cream-200: 247 239 227;
+  --c-cream-300: 241 228 208;
+  --c-sand-400: 230 213 189;
+  --c-sand-500: 214 190 152;
+  --c-ink-500: 122 108 96;
+  --c-ink-700: 74 63 54;
+  --c-danger-50: 251 234 230;
+  --c-danger-600: 163 52 31;
+  --c-warn-50: 255 244 219;
+  --c-warn-800: 122 82 0;
+  --c-info-50: 229 238 249;
+  --c-info-800: 31 78 140;
+  --c-plum-50: 238 232 247;
+  --c-plum-800: 91 62 150;
+  --c-mute-50: 239 232 222;
+  --c-mute-800: 94 82 70;
+  --c-canvas: 246 242 235;
+  --c-panel: 255 255 255;
+  --c-panel-muted: 251 248 243;
+  --c-panel-sunken: 241 233 221;
+  --c-chart: 168 114 42;
+  color-scheme: light;
+}
+
+/* Admin palette: warm cream canvas, an espresso/brown family for brand roles (gold/brown tokens), true green kept for success. AdminLayout puts .admin-ui on <html>
+   (so portalled dialogs follow) plus .admin-dark for the dark theme, and removes both on the way out — the storefront keeps :root. */
+html.admin-ui {
+  --c-cocoa-800: 74 52 38;
+  --c-cocoa-900: 34 24 15;
+  --c-cocoa-950: 20 13 7;
+  --c-brown-600: 92 58 33;
+  --c-brown-700: 139 74 31;
+  --c-brown-800: 110 56 21;
+  --c-gold-50: 248 239 228;
+  --c-gold-100: 241 226 208;
+  --c-gold-300: 221 191 156;
+  --c-gold-400: 185 133 82;
+  --c-gold-500: 160 96 46;
+  --c-gold-600: 139 74 31;
+  --c-gold-700: 110 56 21;
+  --c-leaf-50: 231 242 234;
+  --c-leaf-800: 30 107 62;
+  --c-leaf-900: 23 85 47;
+  --c-cream-50: 250 248 245;
+  --c-cream-100: 244 239 232;
+  --c-cream-200: 237 230 220;
+  --c-cream-300: 227 217 204;
+  --c-sand-400: 232 224 213;
+  --c-sand-500: 213 200 184;
+  --c-ink-500: 118 105 93;
+  --c-ink-700: 63 53 45;
+  --c-danger-50: 251 235 233;
+  --c-danger-600: 180 35 24;
+  --c-warn-50: 255 246 220;
+  --c-warn-800: 122 82 0;
+  --c-info-50: 232 240 250;
+  --c-info-800: 31 78 140;
+  --c-plum-50: 239 234 247;
+  --c-plum-800: 91 62 150;
+  --c-mute-50: 239 233 225;
+  --c-mute-800: 84 74 64;
+  --c-canvas: 245 241 235;
+  --c-panel: 255 255 255;
+  --c-panel-muted: 250 247 243;
+  --c-panel-sunken: 239 232 222;
+  --c-chart: 139 74 31;
+  --c-heading: 74 38 16;
+  --c-house: 36 23 14;
+  --c-house-2: 58 36 22;
+  color-scheme: light;
+}
+html.admin-ui.admin-dark {
+  --c-cocoa-800: 230 217 203;
+  --c-cocoa-900: 244 237 228;
+  --c-cocoa-950: 5 3 2;
+  --c-brown-600: 160 114 79;
+  --c-brown-700: 163 90 42;
+  --c-brown-800: 184 105 58;
+  --c-gold-50: 42 29 20;
+  --c-gold-100: 51 36 26;
+  --c-gold-300: 168 132 102;
+  --c-gold-400: 201 141 92;
+  --c-gold-500: 194 124 72;
+  --c-gold-600: 217 154 102;
+  --c-gold-700: 232 184 142;
+  --c-leaf-50: 17 38 26;
+  --c-leaf-800: 46 138 85;
+  --c-leaf-900: 36 112 70;
+  --c-cream-50: 30 23 18;
+  --c-cream-100: 27 21 16;
+  --c-cream-200: 38 29 22;
+  --c-cream-300: 48 37 28;
+  --c-sand-400: 48 38 30;
+  --c-sand-500: 74 59 47;
+  --c-ink-500: 166 149 133;
+  --c-ink-700: 213 200 186;
+  --c-danger-50: 46 23 20;
+  --c-danger-600: 240 112 95;
+  --c-warn-50: 46 36 16;
+  --c-warn-800: 242 200 110;
+  --c-info-50: 20 34 58;
+  --c-info-800: 147 184 242;
+  --c-plum-50: 36 28 53;
+  --c-plum-800: 190 166 238;
+  --c-mute-50: 38 29 22;
+  --c-mute-800: 205 191 176;
+  --c-canvas: 16 12 9;
+  --c-panel: 23 18 14;
+  --c-panel-muted: 29 23 18;
+  --c-panel-sunken: 38 30 23;
+  --c-chart: 208 138 85;
+  --c-heading: 235 195 156;
+  --c-house: 26 17 11;
+  --c-house-2: 42 28 18;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-cream-100 font-sans text-base text-ink-700 antialiased;
+    line-height: 1.65;
+    text-rendering: optimizeLegibility;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-serif font-normal text-cocoa-900;
+  }
+  a {
+    @apply text-gold-700 transition-colors duration-200 hover:text-brown-700;
+  }
+  :focus-visible {
+    @apply outline outline-2 outline-offset-[3px] outline-gold-500;
+  }
+  ::selection {
+    @apply bg-gold-300 text-cocoa-900;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-eyebrow uppercase text-gold-700;
+  }
+  .container-page {
+    @apply mx-auto w-full max-w-[1240px] px-4 md:px-5 lg:px-6;
+  }
+  .sr-only-focusable:not(:focus) {
+    @apply sr-only;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Blog article body: HTML from the CMS (sanitized on the server), styled with the brand type scale. */
+@layer components {
+  .article-body {
+    @apply text-[17px] leading-[1.8] text-ink-700;
+  }
+  .article-body > * + * {
+    @apply mt-5;
+  }
+  .article-body h2 {
+    @apply mt-10 font-serif text-[28px] leading-tight text-cocoa-900;
+  }
+  .article-body h3 {
+    @apply mt-8 font-serif text-[22px] leading-snug text-cocoa-900;
+  }
+  .article-body h4 {
+    @apply mt-6 font-sans text-sm font-semibold uppercase tracking-[0.14em] text-cocoa-900;
+  }
+  .article-body a {
+    @apply text-gold-700 underline underline-offset-4 hover:text-brown-700;
+  }
+  .article-body strong {
+    @apply font-semibold text-cocoa-900;
+  }
+  .article-body ul {
+    @apply list-disc pl-6;
+  }
+  .article-body ol {
+    @apply list-decimal pl-6;
+  }
+  .article-body li + li {
+    @apply mt-2;
+  }
+  .article-body li::marker {
+    @apply text-gold-600;
+  }
+  .article-body blockquote {
+    @apply border-l-2 border-gold-500 bg-cream-200 px-5 py-4 font-serif text-xl leading-relaxed text-cocoa-900;
+  }
+  .article-body img {
+    @apply h-auto max-w-full rounded-lg border border-sand-400;
+  }
+  .article-body figcaption {
+    @apply mt-2 text-center text-sm text-ink-500;
+  }
+  .article-body hr {
+    @apply my-10 border-sand-400;
+  }
+  .article-body code {
+    @apply rounded bg-cream-300 px-1 py-0.5 text-[15px];
+  }
+}
+
+/* ───────────── Admin & staff panel (scoped to .admin-shell — and .admin-scope for portalled dialogs — so the storefront keeps its editorial look) ─────────────
+   Warm cream canvas, espresso colour blocks with a soft glow, full-pill buttons that press to 0.95,
+   12px cards with layered whisper shadows, Inter with tight -0.01em tracking. Colours come from html.admin-ui above. */
+@layer components {
+  .admin-shell {
+    --admin-topbar: 64px;
+    --admin-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    @apply bg-canvas text-[14px] leading-normal text-ink-700;
+  }
+  :is(.admin-shell, .admin-scope) {
+    font-family: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    letter-spacing: -0.01em;
+  }
+  :is(.admin-shell, .admin-scope) :is(.font-sans, button, input, select, textarea) {
+    font-family: inherit;
+  }
+  /* Hierarchy by weight and colour, not size: page titles in the brand green, section titles in near-black. */
+  :is(.admin-shell, .admin-scope) :is(h1, h2, h3, h4, .font-serif):not(:where(.article-body, .ProseMirror) *) {
+    font-family: inherit;
+    @apply font-semibold tracking-[-0.01em];
+  }
+  .admin-shell h1:not(:where(.article-body, .ProseMirror, .admin-band) *) {
+    color: rgb(var(--c-heading));
+  }
+  /* Radii: 12px cards and panels, 8px chips, 4px fields; buttons are pills (below). */
+  :is(.admin-shell, .admin-scope) :is(.rounded-lg, .rounded-xl, .rounded-2xl) {
+    border-radius: 12px;
+  }
+  :is(.admin-shell, .admin-scope) .rounded-md {
+    border-radius: 8px;
+  }
+  :is(.admin-shell, .admin-scope) :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], .border-0), select, textarea) {
+    @apply rounded-[4px] border-sand-500 bg-panel text-cocoa-900 transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-ink-500;
+  }
+  html.admin-dark :is(.admin-shell, .admin-scope) :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], .border-0), select, textarea) {
+    @apply border-sand-400;
+  }
+  :is(.admin-shell, .admin-scope) :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], .border-0), select, textarea):hover:not(:disabled, :focus) {
+    @apply border-ink-500/60;
+  }
+  :is(.admin-shell, .admin-scope) :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], .border-0), select, textarea):focus {
+    @apply border-brown-700 outline-none ring-[3px] ring-brown-700/15;
+  }
+  :is(.admin-shell, .admin-scope) :is(input, select, textarea)[aria-invalid="true"] {
+    @apply border-danger-600;
+    background-color: rgb(var(--c-danger-600) / 0.05);
+  }
+  :is(.admin-shell, .admin-scope) :is(input, select, textarea):disabled {
+    @apply bg-panel-muted text-ink-500;
+  }
+  :is(.admin-shell, .admin-scope) select:not([multiple]) {
+    @apply appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23878787' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.7rem center;
+  }
+  :is(.admin-shell, .admin-scope) :is(input[type="checkbox"], input[type="radio"]) {
+    accent-color: rgb(var(--c-brown-700));
+  }
+
+  /* Buttons (shared buttonVariants): every one a full pill, flat colour, 0.95 press. Outline = green text + green border. */
+  :is(.admin-shell, .admin-scope) .group.inline-flex:is(button, a) {
+    @apply rounded-full font-semibold tracking-[-0.01em];
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+  :is(.admin-shell, .admin-scope) .group.inline-flex:is(button, a):not(:disabled):active {
+    transform: scale(0.95);
+  }
+  :is(.admin-shell, .admin-scope) :is(.bg-brown-700, .bg-leaf-800).inline-flex {
+    border: 1px solid rgb(var(--c-brown-800));
+    background: rgb(var(--c-brown-700)) linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0));
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(36, 23, 14, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+  :is(.admin-shell, .admin-scope) :is(.bg-brown-700, .bg-leaf-800).inline-flex:hover {
+    background-color: rgb(var(--c-brown-800));
+    box-shadow: 0 1px 2px rgba(36, 23, 14, 0.25), 0 6px 14px -6px rgb(var(--c-brown-700) / 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+  :is(.admin-shell, .admin-scope) .border-sand-500.group.inline-flex {
+    @apply border-brown-700 bg-transparent text-brown-700 shadow-none;
+  }
+  :is(.admin-shell, .admin-scope) .border-sand-500.group.inline-flex:hover {
+    background-color: rgb(var(--c-brown-700) / 0.07);
+    @apply text-brown-800;
+  }
+  html.admin-dark :is(.admin-shell, .admin-scope) .border-sand-500.group.inline-flex {
+    @apply border-gold-600 text-gold-700;
+  }
+  :is(.admin-shell, .admin-scope) .bg-grad-gold {
+    background: rgb(var(--c-brown-700));
+    box-shadow: none;
+  }
+  /* Pill helpers for colour-blocked bands: white-filled with green text, and outlined-on-dark. */
+  .admin-pill-light {
+    @apply inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white bg-white px-4 text-sm font-semibold text-[#6E3815] transition-all duration-200 hover:bg-[#FBF3E9] hover:text-[#4A2610] active:scale-95;
+  }
+  .admin-pill-ghost {
+    @apply inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/80 px-4 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 hover:text-white active:scale-95;
+  }
+
+  :is(.admin-shell, .admin-scope) ::-webkit-scrollbar {
+    @apply h-2 w-2;
+  }
+  :is(.admin-shell, .admin-scope) ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-sand-500;
+  }
+  .admin-scroll-dark::-webkit-scrollbar-thumb {
+    @apply bg-white/15;
+  }
+
+  /* Cards: 12px, layered whisper shadow over a hairline — flat plus a hint of lift. */
+  .admin-card {
+    @apply rounded-xl border border-sand-400/90 bg-panel;
+    box-shadow: 0 1px 2px rgba(36, 23, 14, 0.05), 0 4px 12px -6px rgba(36, 23, 14, 0.08);
+  }
+  :is(.admin-shell, .admin-scope) .rounded-2xl.border.bg-white {
+    box-shadow: 0 1px 2px rgba(36, 23, 14, 0.05), 0 4px 12px -6px rgba(36, 23, 14, 0.08);
+  }
+  .admin-lift {
+    transition: transform 0.3s var(--admin-ease), box-shadow 0.3s var(--admin-ease);
+  }
+  .admin-lift:hover {
+    transform: translateY(-2px);
+    border-color: rgb(var(--c-gold-400) / 0.55);
+    box-shadow: 0 1px 2px rgba(36, 23, 14, 0.05), 0 14px 28px -12px rgba(110, 56, 21, 0.28);
+  }
+  /* Warm light behind each page header plus a faint dot grid that fades out. */
+  .admin-ambient {
+    @apply pointer-events-none absolute inset-x-0 top-0 -z-10 h-[360px] overflow-hidden;
+    background: radial-gradient(700px 240px at 15% -60px, rgb(var(--c-gold-400) / 0.16), transparent 70%);
+  }
+  .admin-ambient::after {
+    content: "";
+    @apply absolute inset-0;
+    background-image: radial-gradient(rgb(var(--c-ink-500) / 0.16) 1px, transparent 1px);
+    background-size: 24px 24px;
+    mask-image: linear-gradient(180deg, black, transparent 80%);
+    -webkit-mask-image: linear-gradient(180deg, black, transparent 80%);
+  }
+  /* Espresso surfaces (sidebar, dashboard welcome band): deep brown with a warm caramel glow. */
+  .admin-espresso {
+    background-color: rgb(var(--c-house));
+    background-image:
+      radial-gradient(140% 45% at 0% 0%, rgba(201, 148, 74, 0.2), transparent 60%),
+      radial-gradient(120% 40% at 100% 100%, rgba(160, 96, 46, 0.16), transparent 60%);
+  }
+  .admin-band {
+    @apply relative isolate overflow-hidden rounded-2xl text-white;
+    background-color: rgb(var(--c-house));
+    background-image:
+      radial-gradient(80% 120% at 0% 0%, rgba(201, 148, 74, 0.32), transparent 55%),
+      radial-gradient(60% 100% at 100% 100%, rgb(var(--c-house-2)), transparent 70%);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 24px 48px -24px rgba(36, 23, 14, 0.6);
+  }
+  /* Fine concentric rings in the top-right corner — a quiet, professional texture. */
+  .admin-band::after {
+    content: "";
+    @apply pointer-events-none absolute -z-10;
+    inset: -40% -10% auto auto;
+    width: 640px;
+    height: 640px;
+    background: repeating-radial-gradient(circle, rgba(232, 195, 154, 0.09) 0 1px, transparent 1px 34px);
+    mask-image: radial-gradient(circle, black 30%, transparent 70%);
+    -webkit-mask-image: radial-gradient(circle, black 30%, transparent 70%);
+  }
+  /* Floating action button: 56px circle, base halo + ambient shadow; the ambient fades on press. */
+  .admin-fab {
+    @apply fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brown-700 text-white;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.24), 0 8px 12px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  .admin-fab::after {
+    content: "";
+    @apply absolute -inset-2 rounded-full;
+  }
+  .admin-fab:hover {
+    @apply bg-brown-800;
+  }
+  .admin-fab:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.24), 0 8px 12px rgba(0, 0, 0, 0);
+  }
+
+  /* Dark theme: white surfaces from shared components become panels; shadows deepen. */
+  html.admin-dark :is(.admin-shell, .admin-scope) .bg-white,
+  html.admin-dark :is(.admin-shell, .admin-scope) .bg-white\/90,
+  html.admin-dark :is(.admin-shell, .admin-scope) .bg-white\/80 {
+    background-color: rgb(var(--c-panel));
+  }
+  html.admin-dark :is(.admin-shell, .admin-scope) .ring-white {
+    --tw-ring-color: rgb(var(--c-panel));
+  }
+  html.admin-dark .admin-card,
+  html.admin-dark :is(.admin-shell, .admin-scope) .rounded-2xl.border.bg-white {
+    @apply border-white/[0.05];
+    box-shadow: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.6);
+  }
+  html.admin-dark .admin-lift:hover {
+    box-shadow: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 10px 20px -8px rgba(0, 0, 0, 0.8);
+  }
+  html.admin-dark .admin-shell .shadow-lg,
+  html.admin-dark .admin-scope.shadow-lg {
+    box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.8);
+  }
+  /* Theme switches cross-fade instead of snapping (skipped for reduced motion by the global rule). */
+  html.admin-theme-switching,
+  html.admin-theme-switching * {
+    transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, fill 0.35s ease !important;
+  }
+
+  /* Tables: hairline rows with hover on wide screens; labelled cards on phones (labels come from DataTable). */
+  .admin-table > thead th {
+    @apply whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-500;
+  }
+  .admin-table > tbody > tr {
+    @apply transition-colors duration-150;
+  }
+  @media (min-width: 768px) {
+    .admin-table > tbody > tr:hover {
+      @apply bg-panel-muted;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .admin-table {
+      min-width: 0 !important;
+    }
+    .admin-table > thead {
+      @apply sr-only;
+    }
+    .admin-table,
+    .admin-table > tbody,
+    .admin-table > tbody > tr,
+    .admin-table > tbody > tr > td {
+      @apply block w-full;
+    }
+    .admin-table > tbody > tr {
+      @apply border-b border-sand-400/70 px-4 py-3;
+    }
+    .admin-table > tbody > tr:has(+ tr[data-continued]) {
+      @apply border-b-0 pb-1;
+    }
+    .admin-table > tbody > tr[data-continued] {
+      @apply pt-1;
+    }
+    .admin-table > tbody > tr > td {
+      @apply flex min-h-[32px] items-start justify-between gap-4 !px-0 !py-1 text-right;
+    }
+    .admin-table > tbody > tr > td[data-primary] {
+      @apply block pb-1.5 text-left text-[15px];
+    }
+    .admin-table > tbody > tr > td[data-full] {
+      @apply block text-left;
+    }
+    .admin-table > tbody > tr > td[data-label]:not([data-primary], [data-full])::before {
+      content: attr(data-label);
+      @apply shrink-0 pt-0.5 text-left text-xs font-medium text-ink-500;
+    }
+    .admin-table > tbody > tr > td:not([data-label]):not([data-primary], [data-full]) {
+      @apply justify-end;
+    }
+    .admin-table > tbody > tr > td:empty {
+      @apply hidden;
+    }
+  }
+}

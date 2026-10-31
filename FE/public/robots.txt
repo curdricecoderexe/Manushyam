@@ -1,0 +1,15 @@
+# ManushyaM storefront
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /account
+Disallow: /checkout
+Disallow: /cart
+Disallow: /wishlist
+Disallow: /search
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /newsletter/
+
+Sitemap: https://manushyam.com/sitemap.xml
