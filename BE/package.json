@@ -12,6 +12,7 @@
     "dev": "nodemon server.js",
     "test:watch": "vitest",
     "lint": "eslint .",
+    "migrate": "node Scripts/migrate.js",
     "seed": "node Scripts/seed.js",
     "seed:dev-users": "node Scripts/seedDevUsers.js"
   },
@@ -35,7 +36,7 @@
     "redis": "^6.3.0",
     "sanitize-html": "^2.18.0",
     "socket.io": "^4.8.4",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

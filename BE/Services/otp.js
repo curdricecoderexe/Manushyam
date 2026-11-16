@@ -7,6 +7,10 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 const RESEND_COOLDOWN_MS = 30 * 1000;
 const MAX_SENDS = 5;
+// New challenges per email and purpose per hour. Each allows MAX_ATTEMPTS guesses, so this caps
+// brute force of the 6-digit code (by someone who already has the password) at ~50 guesses an hour.
+const MAX_CHALLENGES_PER_HOUR = 10;
+const HOUR_MS = 3600 * 1000;
 
 function generateCode() {
   return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
@@ -24,8 +28,11 @@ function safeEqualHex(a, b) {
 
 // Creates a challenge and returns { challenge, code }. The caller emails the code.
 async function createChallenge({ purpose, email, user, payload }) {
-  // One live challenge per email+purpose: starting again replaces the old one.
-  await OtpChallenge.deleteMany({ email, purpose, consumedAt: { $exists: false } });
+  const recent = await OtpChallenge.countDocuments({ email, purpose, createdAt: { $gt: new Date(Date.now() - HOUR_MS) } });
+  if (recent >= MAX_CHALLENGES_PER_HOUR) throw new AppError(429, "OTP_SEND_LIMIT", "Too many codes requested. Please try again in an hour.");
+  // One live challenge per email+purpose: starting again retires the old one (kept, so the hourly
+  // cap above can count it; the TTL index purges it later).
+  await OtpChallenge.updateMany({ email, purpose, consumedAt: { $exists: false } }, { $set: { consumedAt: new Date(), attempts: MAX_ATTEMPTS } });
   const code = generateCode();
   const now = new Date();
   const challenge = await OtpChallenge.create({
@@ -90,4 +97,4 @@ async function verifyChallenge({ challengeId, purpose, email, code }) {
   return challenge;
 }
 
-module.exports = { createChallenge, resendChallenge, verifyChallenge, hashCode, OTP_TTL_MS, MAX_ATTEMPTS, RESEND_COOLDOWN_MS };
+module.exports = { createChallenge, resendChallenge, verifyChallenge, hashCode, OTP_TTL_MS, MAX_ATTEMPTS, RESEND_COOLDOWN_MS, MAX_CHALLENGES_PER_HOUR };

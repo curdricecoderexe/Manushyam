@@ -9,6 +9,7 @@ const { Product } = require("../Models/Product.js");
 const { Cart } = require("../Models/Cart.js");
 const { Coupon, CouponRedemption } = require("../Models/Coupon.js");
 const { Order, IdempotencyKey, WebhookEvent } = require("../Models/Order.js");
+const { Notification } = require("../Models/Notification.js");
 const { PincodeRule, DeliverySettings } = require("../Models/Delivery.js");
 const { seedCatalog } = require("../Services/seed.js");
 const { drainMailQueue } = require("../Services/mailQueue.js");
@@ -56,6 +57,9 @@ beforeEach(async () => {
       rzSeq += 1;
       reply = { status: 200, body: { id: `order_TEST${String(rzSeq).padStart(6, "0")}`, amount: body.amount, status: "created" } };
     }
+    // Reconciliation finds no payments and payment lookups 404 unless a test says otherwise.
+    if (!reply && /\/v1\/orders\/[^/]+\/payments$/.test(u)) reply = { status: 200, body: { entity: "collection", count: 0, items: [] } };
+    if (!reply && /\/v1\/payments\/[^/]+$/.test(u) && init.method === "GET") reply = { status: 404, body: { error: { code: "BAD_REQUEST_ERROR", description: "The id provided does not exist" } } };
     reply ??= { status: 500, body: { error: { description: "unexpected call" } } };
     return new Response(JSON.stringify(reply.body), { status: reply.status ?? 200, headers: { "content-type": "application/json" } });
   });
@@ -132,7 +136,7 @@ describe("delivery check", () => {
   });
 
   it("uses Shiprocket serviceability when configured, and falls back to store rules if it is down", async () => {
-    const srApp = buildApp({ ...RZ, SHIPROCKET_EMAIL: "ops@example.com", SHIPROCKET_PASSWORD: "pw", SHIPROCKET_WEBHOOK_TOKEN: "sr-token" });
+    const srApp = buildApp({ ...RZ, SHIPROCKET_EMAIL: "ops@example.com", SHIPROCKET_PASSWORD: "pw", SHIPROCKET_WEBHOOK_TOKEN: "sr-token-for-tests-123" });
     mockProviders({
       "/auth/login": { body: { token: "sr-jwt" } },
       "delivery_postcode=560001": { body: { data: { available_courier_companies: [{ courier_name: "Delhivery", estimated_delivery_days: "2", cod: 1 }, { courier_name: "Xpress", estimated_delivery_days: "4", cod: 0 }] } } },
@@ -325,6 +329,149 @@ describe("online payment (Razorpay)", () => {
   });
 });
 
+describe("Razorpay hardening", () => {
+  const PAY = "/v1/payments/pay_TEST000001";
+
+  it("checks the payment with Razorpay on verify: records the method, rejects a payment for another order", async () => {
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    const n = res.body.order.orderNumber;
+    const rzOrder = res.body.next.razorpayOrderId;
+    const body = { razorpay_order_id: rzOrder, razorpay_payment_id: "pay_TEST000001", razorpay_signature: sign(RZ.RAZORPAY_KEY_SECRET, `${rzOrder}|pay_TEST000001`) };
+
+    mockProviders({ [PAY]: { body: { id: "pay_TEST000001", order_id: "order_SOMEONEELSE", status: "captured", amount: 99800, method: "card" } } });
+    expect((await request(app).post(`/api/orders/${n}/payment/verify`).set(s.h).send(body)).status).toBe(400);
+
+    mockProviders({ [PAY]: { body: { id: "pay_TEST000001", order_id: rzOrder, status: "captured", amount: 99800, method: "card" } } });
+    const ok = await request(app).post(`/api/orders/${n}/payment/verify`).set(s.h).send(body);
+    expect(ok.body.order.status).toBe("paid");
+    expect((await Order.findOne({ orderNumber: n })).payment.method).toBe("card");
+  });
+
+  it("captures an authorised-only payment (verify and payment.authorized webhook)", async () => {
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    const order = await Order.findOne({ orderNumber: res.body.order.orderNumber });
+    const entity = { id: "pay_TEST000001", order_id: order.payment.razorpayOrderId, status: "authorized", amount: 99800, method: "netbanking" };
+    mockProviders({ "/capture": (b) => ({ body: { ...entity, status: "captured", amount: b.amount } }) });
+    await razorpayWebhook({ event: "payment.authorized", payload: { payment: { entity } } });
+    expect(providerCalls.find((c) => c.url.endsWith("/payments/pay_TEST000001/capture")).body).toEqual({ amount: 99800, currency: "INR" });
+    expect((await Order.findById(order._id)).status).toBe("paid");
+
+    // An authorisation that doesn't match the order total is never captured.
+    const s2 = await shopper();
+    const res2 = await place(s2, { paymentMethod: "razorpay" });
+    const order2 = await Order.findOne({ orderNumber: res2.body.order.orderNumber });
+    providerCalls = [];
+    await razorpayWebhook({ event: "payment.authorized", payload: { payment: { entity: { ...entity, id: "pay_TEST000002", order_id: order2.payment.razorpayOrderId, amount: 100 } } } });
+    expect(providerCalls.some((c) => c.url.includes("/capture"))).toBe(false);
+    expect((await Order.findById(order2._id)).status).toBe("payment_pending");
+  });
+
+  it("asks Razorpay before expiring an unpaid order, so a missed webhook doesn't cancel a paid order", async () => {
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    const order = await Order.findOne({ orderNumber: res.body.order.orderNumber });
+    await Order.updateOne({ _id: order._id }, { $set: { reservedUntil: new Date(Date.now() - 1000) } });
+    mockProviders({ "/payments": { body: { items: [{ id: "pay_F0", order_id: order.payment.razorpayOrderId, status: "failed", amount: 99800 }, { id: "pay_TEST000001", order_id: order.payment.razorpayOrderId, status: "captured", amount: 99800, method: "upi" }] } } });
+    const cron = await request(app).post("/api/cron/cleanup").set("x-cron-secret", CRON_SECRET);
+    expect(cron.body.expiredOrders).toBe(0);
+    const after = await Order.findById(order._id);
+    expect(after.status).toBe("paid");
+    expect(after.payment).toMatchObject({ razorpayPaymentId: "pay_TEST000001", method: "upi" });
+    expect(await stockOf(MEN)).toBe(118);
+  });
+
+  it("keeps an expired unpaid order for a while if Razorpay is down, then cancels it", async () => {
+    mockProviders({ "/payments": { status: 503, body: { error: { description: "down" } } } });
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    const n = res.body.order.orderNumber;
+    await Order.updateOne({ orderNumber: n }, { $set: { reservedUntil: new Date(Date.now() - 1000) } });
+    expect((await request(app).post("/api/cron/cleanup").set("x-cron-secret", CRON_SECRET)).body.expiredOrders).toBe(0);
+    expect((await Order.findOne({ orderNumber: n })).status).toBe("payment_pending");
+    await Order.updateOne({ orderNumber: n }, { $set: { reservedUntil: new Date(Date.now() - 31 * 60 * 1000) } });
+    expect((await request(app).post("/api/cron/cleanup").set("x-cron-secret", CRON_SECRET)).body.expiredOrders).toBe(1);
+    expect((await Order.findOne({ orderNumber: n })).status).toBe("cancelled");
+  }, 20000);
+
+  it("doesn't cancel on abandon when the payment actually went through", async () => {
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    mockProviders({ "/payments": { body: { items: [{ id: "pay_TEST000001", order_id: res.body.next.razorpayOrderId, status: "captured", amount: 99800, method: "upi" }] } } });
+    const ab = await request(app).post(`/api/orders/${res.body.order.orderNumber}/payment/abandon`).set(s.h);
+    expect(ab.body.order.status).toBe("paid");
+  });
+
+  it("refunds a second payment on an already-paid order automatically, once", async () => {
+    mockProviders({ "/refund": { body: { id: "rfnd_DUP1", status: "pending" } } });
+    const s = await shopper();
+    const order = await paidOrder(s);
+    await razorpayWebhook(captured(order, "pay_TEST000002"));
+    await razorpayWebhook({ ...captured(order, "pay_TEST000002"), event: "order.paid" });
+    const refunds = providerCalls.filter((c) => c.url.endsWith("/payments/pay_TEST000002/refund"));
+    expect(refunds).toHaveLength(1);
+    let after = await Order.findById(order._id);
+    expect(after.status).toBe("paid");
+    expect(after.payment.duplicateRefunds).toEqual([expect.objectContaining({ paymentId: "pay_TEST000002", refundId: "rfnd_DUP1", status: "pending" })]);
+
+    await razorpayWebhook({ event: "refund.processed", payload: { refund: { entity: { id: "rfnd_DUP1", payment_id: "pay_TEST000002", amount: 99800, status: "processed" } } } });
+    after = await Order.findById(order._id);
+    expect(after.status).toBe("paid");
+    expect(after.refund?.status ?? "none").toBe("none");
+    expect(after.payment.duplicateRefunds[0].status).toBe("processed");
+  });
+
+  it("marks a failed refund, tells the team and lets an admin retry it", async () => {
+    mockProviders({ "/refund": { body: { id: "rfnd_F1", status: "pending" } } });
+    const admin = bearer((await registerAs(app, "admin")).accessToken);
+    const s = await shopper();
+    const order = await paidOrder(s);
+    await request(app).post(`/api/orders/${order.orderNumber}/cancel`).set(s.h).send({});
+    await razorpayWebhook({ event: "refund.failed", payload: { refund: { entity: { id: "rfnd_F1", payment_id: "pay_TEST000001", amount: 99800, status: "failed" } } } });
+    expect((await Order.findById(order._id)).refund.status).toBe("failed");
+    await drainMailQueue();
+    await drainMailQueue();
+    expect(await Notification.countDocuments({ type: "refund", title: /Refund failed/ })).toBeGreaterThan(0);
+
+    mockProviders({ "/refund": { body: { id: "rfnd_F2", status: "processed" } } });
+    const retry = await request(app).post(`/api/admin/orders/${order._id}/refund`).set(admin).send({});
+    expect(retry.body.order).toMatchObject({ status: "refunded", refund: { status: "processed", razorpayRefundId: "rfnd_F2" } });
+  });
+
+  it("starts only one refund when two are requested at once", async () => {
+    let release;
+    const gate = new Promise((r) => (release = r));
+    mockProviders({ "/refund": async () => (await gate, { body: { id: "rfnd_ONE", status: "pending" } }) });
+    const admin = bearer((await registerAs(app, "admin")).accessToken);
+    const s = await shopper();
+    const order = await paidOrder(s);
+    await Order.updateOne({ _id: order._id }, { $set: { status: "delivered" } });
+    const a = request(app).post(`/api/admin/orders/${order._id}/refund`).set(admin).send({}).then((r) => r);
+    const b = request(app).post(`/api/admin/orders/${order._id}/refund`).set(admin).send({}).then((r) => r);
+    setTimeout(release, 200);
+    const results = await Promise.all([a, b]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(providerCalls.filter((c) => c.url.endsWith("/refund"))).toHaveLength(1);
+  });
+
+  it("ignores webhooks for another Razorpay account and events it doesn't handle", async () => {
+    const scoped = buildApp({ ...RZ, CRON_SECRET, RAZORPAY_ACCOUNT_ID: "acc_OURS123" });
+    const s = await shopper();
+    const res = await place(s, { paymentMethod: "razorpay" });
+    const order = await Order.findOne({ orderNumber: res.body.order.orderNumber });
+    const send = (event) => {
+      const raw = JSON.stringify(event);
+      return request(scoped).post("/api/webhooks/razorpay").set("Content-Type", "application/json").set("X-Razorpay-Signature", sign(RZ.RAZORPAY_WEBHOOK_SECRET, raw)).set("X-Razorpay-Event-Id", key()).send(raw);
+    };
+    expect((await send({ ...captured(order), account_id: "acc_THEIRS99" })).body.result).toBe("ignored");
+    expect((await send({ event: "payment.downtime.started", account_id: "acc_OURS123", payload: {} })).body.result).toBe("ignored");
+    expect((await Order.findById(order._id)).status).toBe("payment_pending");
+    expect((await send({ ...captured(order), account_id: "acc_OURS123" })).body.result).toBe("processed");
+    expect((await Order.findById(order._id)).status).toBe("paid");
+  });
+});
+
 describe("reservation expiry (cron)", () => {
   it("requires the cron secret", async () => {
     expect((await request(app).post("/api/cron/cleanup")).status).toBe(401);
@@ -376,11 +523,14 @@ describe("customer order pages", () => {
     expect((await request(app).get(`/api/orders/${n}`).set(a.h)).body.order.address.line1).toBe("12 MG Road");
   });
 
-  it("lets a customer cancel a paid order before packing (refund requested), not after", async () => {
+  it("lets a customer cancel a paid order before packing (refunded automatically), not after", async () => {
+    mockProviders({ "/refund": { body: { id: "rfnd_AUTO1", status: "pending" } } });
     const s = await shopper();
     const order = await paidOrder(s);
     const cancel = await request(app).post(`/api/orders/${order.orderNumber}/cancel`).set(s.h).send({ reason: "Ordered twice" });
-    expect(cancel.body.order).toMatchObject({ status: "cancelled", refund: { status: "requested", amount: 99800 }, canCancel: false });
+    expect(cancel.body.order).toMatchObject({ status: "cancelled", refund: { status: "pending", amount: 99800 }, canCancel: false });
+    expect(providerCalls.find((c) => c.url.endsWith("/payments/pay_TEST000001/refund")).body).toMatchObject({ amount: 99800, speed: "normal", receipt: `rf-${order.orderNumber}` });
+    expect((await Order.findById(order._id)).refund.razorpayRefundId).toBe("rfnd_AUTO1");
     expect(await stockOf(MEN)).toBe(120);
     await drainMailQueue();
     expect(outbox.some((m) => m.meta?.purpose === "order-cancelled")).toBe(true);

@@ -3,7 +3,7 @@ const { z } = require("zod");
 const { verifyAccessToken } = require("../Services/tokens");
 const { getAuthUser } = require("../Services/userCache");
 const chat = require("../Services/chat");
-const { setIo, userRoom, chatRoom, STAFF_ROOM } = require("../Services/realtime");
+const { setIo, userRoom, chatRoom, STAFF_ROOM, ADMIN_ROOM } = require("../Services/realtime");
 const { logger } = require("../Utils/logger");
 
 // Per-socket token bucket: bursts of 10 events, refilling at 1 per second.
@@ -34,9 +34,14 @@ async function checkSession(socket) {
   if (claims.exp * 1000 <= Date.now()) return "expired";
   const user = await getAuthUser(claims.sub);
   if (!user || user.deletedAt || !user.isActive || user.tokenVersion !== claims.tv) return "revoked";
-  // A role change (e.g. staff demoted) applies to the next event.
-  socket.data.user.role = user.role;
-  if (!["staff", "admin"].includes(user.role)) socket.leave(STAFF_ROOM);
+  // A role change (e.g. staff demoted) applies to the next event: drop the old role's rooms and
+  // every chat room (access is re-checked when the client joins again).
+  if (socket.data.user.role !== user.role) {
+    socket.data.user.role = user.role;
+    for (const room of [...socket.rooms]) if (room.startsWith("chat:") || room === STAFF_ROOM || room === ADMIN_ROOM) socket.leave(room);
+    if (chat.isStaff(user)) socket.join(STAFF_ROOM);
+    if (user.role === "admin") socket.join(ADMIN_ROOM);
+  }
   return null;
 }
 
@@ -66,6 +71,7 @@ function attachSocketServer(httpServer, env) {
     const { user } = socket.data;
     socket.join(userRoom(user.id));
     if (chat.isStaff(user)) socket.join(STAFF_ROOM);
+    if (user.role === "admin") socket.join(ADMIN_ROOM);
 
     // Wraps every client event: session check, rate limit, payload validation, errors → ack.
     const on = (event, schema, handler) => {

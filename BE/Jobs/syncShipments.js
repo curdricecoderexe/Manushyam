@@ -11,6 +11,7 @@ async function syncShipments(now = new Date()) {
   const open = await Order.find({
     status: { $in: ["packed", "shipped", "out_for_delivery"] },
     "shipment.awb": { $exists: true, $ne: null },
+    "shipment.cancelledAt": { $exists: false },
     $or: [{ "shipment.lastSyncedAt": { $exists: false } }, { "shipment.lastSyncedAt": { $lte: new Date(now.getTime() - STALE_MS) } }],
   }).limit(100);
   let updated = 0;

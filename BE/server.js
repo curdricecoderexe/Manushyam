@@ -2,17 +2,20 @@ require("dotenv").config();
 
 const { loadEnv } = require("./Config/env");
 const { connectDB, disconnectDB } = require("./Config/db");
+const { ensureIndexes } = require("./Config/indexes");
 const { createApp } = require("./app");
 const { attachSocketServer } = require("./Sockets");
 const { logger } = require("./Utils/logger");
+const { razorpayConfigured, razorpayMode } = require("./Services/razorpay");
 
 async function start() {
   const env = loadEnv();
   await connectDB(env.MONGODB_URI);
+  await ensureIndexes();
 
   const app = createApp(env);
   const server = app.listen(env.PORT, () => {
-    logger.info({ port: env.PORT, env: env.NODE_ENV }, "ManushyaM API listening");
+    logger.info({ port: env.PORT, env: env.NODE_ENV, payments: razorpayConfigured(env) ? `razorpay (${razorpayMode(env)})` : "cod only" }, "ManushyaM API listening");
   });
   // Live chat + notification push share the HTTP server (path /socket.io).
   const io = attachSocketServer(server, env);

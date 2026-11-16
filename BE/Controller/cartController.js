@@ -157,6 +157,9 @@ async function updateCoupon(req, res) {
   if (req.body.code && req.body.code !== coupon.code) throw AppError.badRequest("Codes can’t be renamed — create a new coupon instead", [{ path: "code", message: "Can’t be changed" }]);
   const before = coupon.toObject();
   coupon.set(req.body);
+  // The request may change only `type`; check the rules against the coupon as it will be saved.
+  if (coupon.type === "percent" && coupon.value > 90) throw AppError.badRequest("Use 1–90 for a percentage", [{ path: "value", message: "Use 1–90 for a percentage" }]);
+  if (coupon.startsAt && coupon.endsAt && coupon.endsAt <= coupon.startsAt) throw AppError.badRequest("End must be after start", [{ path: "endsAt", message: "End must be after start" }]);
   await coupon.save();
   audit(req, { action: "coupon.update", resourceId: coupon._id, before, after: coupon, summary: coupon.code });
   res.json({ coupon: coupon.toAdmin() });

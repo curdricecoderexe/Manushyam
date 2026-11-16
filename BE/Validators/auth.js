@@ -27,7 +27,7 @@ const schemas = {
   reset: z.object({ email, code, password }).strict(),
   updateMe: z.object({ name: name.optional(), phone: phone.optional() }).strict(),
   changePassword: z.object({ currentPassword: z.string().min(1).max(128), newPassword: password }).strict(),
-  deleteAccount: z.object({ password: z.string().min(1, "Enter your password").max(128), confirm: z.literal("DELETE", { errorMap: () => ({ message: "Type DELETE to confirm" }) }) }).strict(),
+  deleteAccount: z.object({ password: z.string().min(1, "Enter your password").max(128), confirm: z.literal("DELETE", { message: "Type DELETE to confirm" }) }).strict(),
   address: z
     .object({
       label: z.string().trim().max(20).optional(),
@@ -37,7 +37,7 @@ const schemas = {
       line2: z.string().trim().max(120).optional(),
       landmark: z.string().trim().max(80).optional(),
       city: z.string().trim().min(2, "Enter a city").max(60),
-      state: z.enum(INDIA_STATES, { errorMap: () => ({ message: "Choose a state" }) }),
+      state: z.enum(INDIA_STATES, { message: "Choose a state" }),
       pincode: z.string().trim().regex(/^[1-9][0-9]{5}$/, "Enter a valid 6-digit PIN code"),
       isDefault: z.boolean().optional(),
     })

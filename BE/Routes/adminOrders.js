@@ -1,5 +1,6 @@
 const express = require("express");
 const ctrl = require("../Controller/adminOrderController");
+const shipping = require("../Controller/shippingController");
 const { dashboard } = require("../Controller/dashboardController");
 const { validate } = require("../Middleware/validate");
 const { requireAuth, requireRole } = require("../Middleware/auth");
@@ -20,7 +21,15 @@ function adminOrderRoutes() {
   router.get("/orders/:id", ...staff, byId, ctrl.getOrder);
   router.get("/orders/:id/invoice", ...staff, byId, ctrl.invoice);
   router.post("/orders/:id/status", ...staff, write, byId, validate({ body: schemas.statusUpdate }), ctrl.updateStatus);
-  router.post("/orders/:id/shipment", ...staff, write, byId, ctrl.retryShipment);
+  router.post("/orders/:id/shipment", ...staff, write, byId, validate({ body: schemas.bookShipment }), ctrl.retryShipment);
+  router.get("/orders/:id/packaging", ...staff, byId, shipping.orderPackaging);
+  router.post("/orders/:id/manifest", ...staff, write, byId, shipping.manifest);
+
+  // Box sizes: everyone packing can see them; only admins change them.
+  router.get("/boxes", ...staff, shipping.listBoxes);
+  router.post("/boxes", ...admin, write, validate({ body: schemas.boxSize }), shipping.createBox);
+  router.patch("/boxes/:id", ...admin, write, byId, validate({ body: schemas.boxSizeUpdate }), shipping.updateBox);
+  router.delete("/boxes/:id", ...admin, write, byId, shipping.deleteBox);
   router.post("/orders/:id/refund", ...admin, write, byId, validate({ body: schemas.refund }), ctrl.refund);
 
   router.get("/delivery", ...admin, ctrl.getDelivery);

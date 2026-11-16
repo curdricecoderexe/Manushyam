@@ -105,6 +105,11 @@ const orderSchema = new mongoose.Schema(
       capturedAt: Date,
       failedAttempts: { type: Number, default: 0 },
       lastError: String,
+      // Extra payments captured against an already-paid order, refunded automatically.
+      duplicateRefunds: {
+        type: [{ _id: false, paymentId: String, amount: Number, refundId: String, status: { type: String, enum: ["pending", "processed", "failed"] } }],
+        default: undefined,
+      },
     },
     cod: { _id: false, challengeId: String, confirmedAt: Date },
     refund: {
@@ -116,6 +121,8 @@ const orderSchema = new mongoose.Schema(
       reference: { type: String, maxlength: 120 },
       note: { type: String, maxlength: 300 },
       processedAt: Date,
+      // Why Razorpay couldn't start or finish the refund (status "failed").
+      error: { type: String, maxlength: 200 },
     },
     shipment: {
       _id: false,
@@ -125,7 +132,22 @@ const orderSchema = new mongoose.Schema(
       courier: String,
       trackingUrl: String,
       labelUrl: String,
+      manifestUrl: String,
+      // Box and weights declared to the courier (from Admin → Box sizes).
+      box: { _id: false, id: String, name: String, code: String, lengthCm: Number, breadthCm: Number, heightCm: Number },
+      weightGrams: Number,
+      volumetricWeightGrams: Number,
+      courierId: String,
+      bookedAt: Date,
+      pickupScheduledAt: Date,
+      pickupDate: String,
+      // Booking failed (retry from the order panel) / booked but pickup or label still pending.
       error: String,
+      warning: String,
+      // Latest raw courier status and anything someone has to act on (failed delivery, lost parcel…).
+      lastStatus: String,
+      alert: { _id: false, kind: String, title: String, at: Date },
+      cancelledAt: Date,
       events: { type: [{ _id: false, at: Date, status: String, location: String, activity: String }], default: [] },
       lastSyncedAt: Date,
     },

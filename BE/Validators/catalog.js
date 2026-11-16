@@ -25,7 +25,8 @@ const href = z
   .string()
   .trim()
   .max(200)
-  .refine((u) => /^\/(?!\/)[^\s]*$/.test(u) || /^https:\/\/[^\s"'<>]+$/.test(u), "Use a site path like /solutions or an https URL");
+  // "/\\evil.com" is treated as "//evil.com" by browsers, so backslashes are refused too.
+  .refine((u) => /^\/(?![/\\])[^\s\\]*$/.test(u) || /^https:\/\/[^\s"'<>\\]+$/.test(u), "Use a site path like /solutions or an https URL");
 
 // Comma-separated query values: ?type=therapy,combo
 const csvEnum = (values) =>
@@ -35,9 +36,10 @@ const csvEnum = (values) =>
     .transform((s) => [...new Set(s.split(",").map((v) => v.trim()).filter(Boolean))])
     .pipe(z.array(z.enum(values)).max(values.length));
 
+const sku = z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{3,40}$/, "SKU: 3–40 letters, numbers or hyphens");
 const variant = z
   .object({
-    sku: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{3,40}$/, "SKU: 3–40 letters, numbers or hyphens"),
+    sku,
     label: text(80).min(1),
     price: paise,
     mrp: paise.optional(),
@@ -166,7 +168,7 @@ const schemas = {
     .partial()
     .strict()
     .refine((b) => Object.keys(b).length > 0, "Nothing to update"),
-  stockUpdate: z.object({ sku: variant.innerType().shape.sku, stock: z.number().int().min(0).max(1_000_000) }).strict(),
+  stockUpdate: z.object({ sku, stock: z.number().int().min(0).max(1_000_000) }).strict(),
   heroSlide,
   heroSlideUpdate: heroSlide.partial().strict(),
   faq,

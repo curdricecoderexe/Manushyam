@@ -1,7 +1,7 @@
 // Creates (or resets) local test accounts: `npm run seed:dev-users`. Development only — refuses to
 // run in production. Re-running resets each account's password, role and any lockout.
 //
-// Test logins (local dev only; sign-in codes arrive in Mailpit at http://localhost:8025):
+// Test logins (local dev only; sign-in codes are printed in the API log while SMTP_USER is empty):
 //   admin     admin@example.com     Admin@12345
 //   staff     staff@example.com     Staff@12345
 //   customer  customer@example.com  Customer@12345
@@ -23,6 +23,15 @@ const ACCOUNTS = [
 async function main() {
   const env = loadEnv();
   if (env.isProd) throw new Error("seed:dev-users is for local development only");
+  // These accounts have published passwords: refuse any database that isn't on this machine.
+  const host = (() => {
+    try {
+      return new URL(env.MONGODB_URI.replace(/^mongodb(\+srv)?:/, "http:")).hostname;
+    } catch {
+      return "";
+    }
+  })();
+  if (!["localhost", "127.0.0.1", "::1", "mongo"].includes(host)) throw new Error(`seed:dev-users only runs against a local database (got ${host || "an unparseable URI"})`);
   await connectDB(env.MONGODB_URI);
 
   for (const a of ACCOUNTS) {

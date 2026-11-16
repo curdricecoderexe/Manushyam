@@ -130,8 +130,13 @@ async function forgotPassword(req, res) {
   if (user) {
     const recent = await OtpChallenge.exists({ email, purpose: "reset", consumedAt: { $exists: false }, lastSentAt: { $gt: new Date(Date.now() - otp.RESEND_COOLDOWN_MS) } });
     if (!recent) {
-      const { code } = await otp.createChallenge({ purpose: "reset", email, user: user._id });
-      await mailer.sendOtpEmail({ to: email, code, purpose: "reset" });
+      try {
+        const { code } = await otp.createChallenge({ purpose: "reset", email, user: user._id });
+        await mailer.sendOtpEmail({ to: email, code, purpose: "reset" });
+      } catch (err) {
+        // Over the hourly cap: answer exactly as for an unknown email, so the limit can't reveal accounts.
+        if (err.code !== "OTP_SEND_LIMIT") throw err;
+      }
     }
   }
   return res.status(202).json(RESET_RESPONSE);

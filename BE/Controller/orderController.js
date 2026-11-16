@@ -60,7 +60,7 @@ async function verifyPayment(req, res) {
   if (order.payment?.razorpayOrderId !== rzOrderId || !verifyPaymentSignature({ orderId: rzOrderId, paymentId, signature })) {
     throw new AppError(400, "PAYMENT_VERIFICATION_FAILED", "We couldn’t verify this payment. If money was deducted, it will be confirmed or refunded automatically.");
   }
-  const updated = await orders.markPaid({ razorpayOrderId: rzOrderId, paymentId, source: "customer" });
+  const updated = await orders.confirmCheckoutPayment(order, { paymentId });
   res.json({ order: updated.toCustomer() });
 }
 
@@ -68,6 +68,9 @@ async function verifyPayment(req, res) {
 async function abandonPayment(req, res) {
   const order = await loadOwnOrder(req);
   if (order.status !== "payment_pending") return res.json({ order: order.toCustomer() });
+  // A UPI / netbanking payment can succeed just as the window is closed: check before cancelling.
+  const paid = await orders.reconcilePayment(order, { source: "customer" }).catch(() => null);
+  if (paid) return res.json({ order: paid.toCustomer() });
   const cancelled = await orders.cancelOrder(order, { source: "customer", by: req.user.id, reason: "Payment not completed" });
   res.json({ order: cancelled.toCustomer() });
 }

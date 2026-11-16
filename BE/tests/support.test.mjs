@@ -228,6 +228,64 @@ describe("chat over Socket.IO", () => {
     expect(results.filter((r) => r.ok).length).toBeLessThanOrEqual(11);
   });
 
+  it("stops other staff hearing a chat once a colleague accepts it, and only sends staff views to staff", async () => {
+    const customer = await registerUser(app);
+    const agentA = await registerAs(app, "staff");
+    const agentB = await registerAs(app, "staff");
+    const id = (await request(app).post("/api/chat").set(bearer(customer.accessToken)).send({ message: "Need help" })).body.chat.id;
+    const cs = socketFor(customer.accessToken);
+    const a = socketFor(agentA.accessToken);
+    const b = socketFor(agentB.accessToken);
+    await Promise.all([connected(cs), connected(a), connected(b)]);
+    // While it waits in the queue every agent may look at it.
+    expect((await ask(a, "chat:join", { chatId: id })).ok).toBe(true);
+    expect((await ask(b, "chat:join", { chatId: id })).ok).toBe(true);
+    expect((await ask(cs, "chat:join", { chatId: id })).ok).toBe(true);
+
+    const heardByB = [];
+    b.on("chat:message", (m) => heardByB.push(["message", m.body]));
+    b.on("chat:staff-updated", (c) => heardByB.push(["staff-updated", c.id]));
+    const customerStaffViews = [];
+    cs.on("chat:staff-updated", (c) => customerStaffViews.push(c));
+
+    const aUpdated = next(a, "chat:staff-updated");
+    await request(app).post(`/api/chat/${id}/accept`).set(bearer(agentA.accessToken));
+    expect((await aUpdated).customer.email).toBe(customer.email);
+
+    const toA = next(a, "chat:message");
+    expect((await ask(cs, "chat:send", { chatId: id, body: "My order is late" })).ok).toBe(true);
+    expect((await toA).body).toBe("My order is late");
+    await new Promise((r) => setTimeout(r, 150));
+    expect(heardByB.filter(([kind, v]) => kind === "message" && v === "My order is late")).toEqual([]);
+    expect(heardByB.filter(([kind]) => kind === "staff-updated")).toEqual([]);
+    // The customer never receives the staff view (their contact details + internal ids).
+    expect(customerStaffViews).toEqual([]);
+    // And B can't rejoin.
+    expect((await ask(b, "chat:join", { chatId: id })).error.code).toBe("NOT_FOUND");
+  });
+
+  it("drops a demoted agent out of staff and chat rooms on their next event", async () => {
+    const customer = await registerUser(app);
+    const agent = await registerAs(app, "staff");
+    const id = (await request(app).post("/api/chat").set(bearer(customer.accessToken)).send({})).body.chat.id;
+    await request(app).post(`/api/chat/${id}/accept`).set(bearer(agent.accessToken));
+    const cs = socketFor(customer.accessToken);
+    const as = socketFor(agent.accessToken);
+    await Promise.all([connected(cs), connected(as)]);
+    expect((await ask(as, "chat:join", { chatId: id })).ok).toBe(true);
+
+    const heard = [];
+    as.on("chat:message", (m) => heard.push(m.body));
+    const admin = await registerAs(app, "admin");
+    expect((await request(app).patch(`/api/admin/users/${agent.user.id}`).set(bearer(admin.accessToken)).send({ role: "customer" })).status).toBe(200);
+    // Their conversation is back in the queue for the rest of the team.
+    expect(await Chat.findById(id)).toMatchObject({ status: "pending" });
+    expect((await Chat.findById(id)).assignedTo).toBeUndefined();
+    expect((await ask(cs, "chat:send", { chatId: id, body: "secret details" })).ok).toBe(true);
+    await new Promise((r) => setTimeout(r, 150));
+    expect(heard).toEqual([]);
+  });
+
   it("cuts off a socket once the session is revoked", async () => {
     const customer = await registerUser(app);
     const id = (await request(app).post("/api/chat").set(bearer(customer.accessToken)).send({})).body.chat.id;

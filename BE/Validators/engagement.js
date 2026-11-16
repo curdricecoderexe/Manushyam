@@ -92,7 +92,7 @@ const schemas = {
         .transform((v) => v.replace(/[\s-]/g, "").replace(/^(\+91|91|0)(?=\d{10}$)/, ""))
         .pipe(z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"))
         .optional(),
-      subject: z.enum(CONTACT_SUBJECTS, { errorMap: () => ({ message: "Choose a topic" }) }),
+      subject: z.enum(CONTACT_SUBJECTS, { message: "Choose a topic" }),
       message: cleanText(10, 2000, "Tell us a little more (at least 10 characters)"),
       website: honeypot,
       turnstileToken: z.string().max(4096).optional(),

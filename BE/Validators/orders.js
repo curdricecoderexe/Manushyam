@@ -14,6 +14,32 @@ const note = z.string().trim().max(300).optional();
 const eta = z.object({ min: z.number().int().min(0).max(30), max: z.number().int().min(0).max(30) }).strict().refine((e) => e.max >= e.min, { message: "Max days must be at least min days" });
 const page = z.coerce.number().int().min(1).max(500).default(1);
 
+const cm = z.number().min(0.5, "At least 0.5 cm").max(300, "At most 300 cm");
+const grams = z.number().int("Whole grams").min(0).max(100000);
+function boxSchema() {
+  return z
+    .object({
+      name: z.string().trim().min(1, "Give the box a name").max(60),
+      code: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^[A-Z0-9-]{1,20}$/, "Letters, numbers or -")
+        .nullable()
+        .optional(),
+      lengthCm: cm,
+      breadthCm: cm,
+      heightCm: cm,
+      emptyWeightGrams: grams.optional(),
+      maxWeightGrams: grams.min(1).nullable().optional(),
+      maxUnits: z.number().int().min(1).max(500).nullable().optional(),
+      isActive: z.boolean().optional(),
+      isDefault: z.boolean().optional(),
+      notes: z.string().trim().max(200).optional(),
+    })
+    .strict();
+}
+
 const schemas = {
   deliveryCheck: z.object({ pincode, subtotal: z.coerce.number().int().min(0).max(10_000_000).optional() }).strict(),
   quote: z
@@ -70,8 +96,13 @@ const schemas = {
         })
         .strict()
         .optional(),
+      // Box to ship in when packing (Admin → Box sizes); empty = the suggested box.
+      boxId: objectId.optional(),
     })
     .strict(),
+  bookShipment: z.object({ boxId: objectId.optional() }).strict(),
+  boxSize: boxSchema(),
+  boxSizeUpdate: boxSchema().partial(),
   refund: z
     .object({
       amount: z.number().int().min(1).max(10_000_000).optional(),

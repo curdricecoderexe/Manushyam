@@ -55,7 +55,7 @@ async function updateStatus(req, res) {
   // Staff handle fulfilment; cancelling (which can trigger a refund) is an admin decision.
   if (req.body.status === "cancelled" && source !== "admin") throw AppError.forbidden("Only an admin can cancel orders.");
   const before = order.status;
-  const updated = await orders.advanceOrder(order, req.body.status, { source, by: req.user.id, note: req.body.note, shipment: req.body.shipment });
+  const updated = await orders.advanceOrder(order, req.body.status, { source, by: req.user.id, note: req.body.note, shipment: req.body.shipment, boxId: req.body.boxId });
   audit(req, { action: "order.status", resourceId: order._id, before: { status: before }, after: { status: updated.status, ...(req.body.note ? { note: req.body.note } : {}), ...(req.body.shipment ? { shipment: req.body.shipment } : {}) }, summary: order.orderNumber });
   res.json({ order: updated.toAdmin() });
 }
@@ -64,9 +64,12 @@ async function updateStatus(req, res) {
 async function retryShipment(req, res) {
   const order = await loadOrder(req.params.id);
   if (!shiprocketConfigured()) throw new AppError(503, "SHIPPING_UNAVAILABLE", "Shiprocket isn’t configured.");
-  if (order.status !== "packed") throw new AppError(409, "INVALID_TRANSITION", "Only packed orders can be booked with the courier.");
-  const updated = await orders.bookShipment(order);
-  audit(req, { action: "order.shipment", resourceId: order._id, after: { awb: updated.shipment?.awb, error: updated.shipment?.error }, summary: order.orderNumber });
+  // Packed: book (or finish booking). Already with the courier: only finish the pickup / label.
+  const finishing = ["shipped", "out_for_delivery"].includes(order.status) && order.shipment?.shipmentId;
+  if (order.status !== "packed" && !finishing) throw new AppError(409, "INVALID_TRANSITION", "Only packed orders can be booked with the courier.");
+  if (order.shipment?.cancelledAt) throw new AppError(409, "SHIPMENT_CANCELLED", "This shipment was cancelled at Shiprocket.");
+  const updated = await orders.bookShipment(order, { boxId: req.body?.boxId });
+  audit(req, { action: "order.shipment", resourceId: order._id, after: { awb: updated.shipment?.awb, box: updated.shipment?.box?.name, error: updated.shipment?.error, warning: updated.shipment?.warning }, summary: order.orderNumber });
   res.json({ order: updated.toAdmin() });
 }
 

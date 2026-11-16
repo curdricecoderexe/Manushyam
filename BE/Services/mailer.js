@@ -9,7 +9,15 @@ let transport = null;
 function getTransport() {
   if (transport) return transport;
   const env = getEnv();
-  transport = env.SMTP_URL ? nodemailer.createTransport(env.SMTP_URL) : nodemailer.createTransport({ jsonTransport: true });
+  transport = env.mailEnabled
+    ? nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_PORT === 465,
+        requireTLS: env.SMTP_PORT !== 465,
+        auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+      })
+    : nodemailer.createTransport({ jsonTransport: true });
   return transport;
 }
 
@@ -32,7 +40,7 @@ function layout({ heading, bodyHtml }) {
 async function sendMail({ to, subject, heading, bodyHtml, text, meta, attachments, replyTo, headers }) {
   const env = getEnv();
   const message = { from: env.MAIL_FROM, to, subject, text, html: layout({ heading, bodyHtml }), ...(attachments ? { attachments } : {}), ...(replyTo ? { replyTo } : {}), ...(headers ? { headers } : {}) };
-  if (env.isTest || !env.SMTP_URL) {
+  if (env.isTest || !env.mailEnabled) {
     outbox.push({ ...message, meta });
     if (outbox.length > 100) outbox.shift();
     if (!env.isTest) logger.info({ subject, meta }, "Email captured (no SMTP configured)");

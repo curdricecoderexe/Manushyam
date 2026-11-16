@@ -1,6 +1,6 @@
 const { Chat, ChatMessage } = require("../Models/Chat");
 const { User } = require("../Models/User");
-const { emit, userRoom, chatRoom, STAFF_ROOM } = require("./realtime");
+const { emit, evictFromRoom, userRoom, chatRoom, STAFF_ROOM, ADMIN_ROOM } = require("./realtime");
 const { notify } = require("./notifications");
 const { AppError } = require("../Utils/AppError");
 
@@ -55,8 +55,12 @@ async function broadcastChat(chatId) {
   const chat = await Chat.findById(chatId).populate("assignedTo", "name").populate("customer", "name email phone");
   if (!chat) return;
   emit([userRoom(chat.customer._id)], "chat:updated", chatView(chat, { id: String(chat.customer._id), role: "customer" }));
-  // Staff side (admin view shape; the staff UI filters by assignment itself).
-  emit([STAFF_ROOM, chatRoom(chat._id)], "chat:staff-updated", chatView(chat, { id: "staff", role: "admin" }));
+  // Staff view (with the customer's contact details and the latest message preview): every staff
+  // member while it waits in the queue, then only admins and the assigned agent.
+  const staffRooms = chat.status === "pending" ? [STAFF_ROOM, ADMIN_ROOM] : [ADMIN_ROOM, chat.assignedTo ? userRoom(chat.assignedTo._id ?? chat.assignedTo) : null];
+  emit(staffRooms, "chat:staff-updated", chatView(chat, { id: "staff", role: "admin" }));
+  // Whoever joined the room earlier but can't see the chat now (other staff once it's accepted) leaves it.
+  await evictFromRoom(chatRoom(chat._id), (u) => canAccess(chat, u));
 }
 
 async function systemMessage(chat, body) {

@@ -13,6 +13,7 @@ const { invalidateUser } = require("../Services/userCache");
 const { sendMail, escapeHtml } = require("../Services/mailer");
 const { enqueue } = require("../Services/mailQueue");
 const { audit } = require("../Services/audit");
+const { emit, evictFromRoom, chatRoom, STAFF_ROOM } = require("../Services/realtime");
 const { escapeRegex } = require("../Services/search");
 const { getEnv } = require("../Config/runtime");
 const { AppError } = require("../Utils/AppError");
@@ -59,6 +60,16 @@ async function assertNotLastAdmin(user) {
 
 function assertNotSelf(req, user, message) {
   if (String(user._id) === req.user.id) throw new AppError(409, "SELF_CHANGE", message);
+}
+
+async function releaseAssignedChats(userId) {
+  const chats = await Chat.find({ assignedTo: userId, status: "active" }).select("_id");
+  if (!chats.length) return;
+  await Chat.updateMany({ _id: { $in: chats.map((c) => c._id) } }, { $set: { status: "pending" }, $unset: { assignedTo: "", acceptedAt: "" } });
+  for (const c of chats) {
+    emit(STAFF_ROOM, "queue:updated", { chatId: String(c._id) });
+    await evictFromRoom(chatRoom(c._id), (u) => String(u.id) !== String(userId));
+  }
 }
 
 async function listUsers(req, res) {
@@ -152,6 +163,9 @@ async function updateUser(req, res) {
   await user.save();
   if (demoting || deactivating) await revokeAllForUser(user._id);
   invalidateUser(user._id);
+  // Someone who is no longer an active team member must stop receiving their customers' messages:
+  // their open conversations go back to the queue for the rest of the team.
+  if ((demoting && user.role === "customer") || deactivating) await releaseAssignedChats(user._id);
   const after = { name: user.name, phone: user.phone ?? null, role: user.role, isActive: user.isActive };
   const action = demoting ? "user.role" : isActive !== undefined && isActive !== before.isActive ? (isActive ? "user.activate" : "user.deactivate") : "user.update";
   audit(req, { action, resourceId: user._id, before, after, summary: user.email });
@@ -190,6 +204,7 @@ async function deleteUser(req, res) {
   user.set({ deletedAt: new Date(), isActive: false, tokenVersion: user.tokenVersion + 1 });
   await user.save();
   await revokeAllForUser(user._id);
+  await releaseAssignedChats(user._id);
   invalidateUser(user._id);
   audit(req, { action: "user.softDelete", resourceId: user._id, before: { isActive: true, deletedAt: null }, after: { isActive: false, deletedAt: user.deletedAt }, summary: user.email });
   return res.json({ deleted: "soft" });

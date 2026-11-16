@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 const { logger } = require("../Utils/logger");
 
 mongoose.set("strictQuery", true);
-// Indexes are built automatically in dev/test; in production they are created by a migration script.
+// Indexes are built automatically in dev/test; in production Config/indexes.js creates them at boot
+// (and `npm run migrate` does the same on demand).
 mongoose.set("autoIndex", process.env.NODE_ENV !== "production");
 
 async function connectDB(uri, { retries = 5, delayMs = 2000 } = {}) {

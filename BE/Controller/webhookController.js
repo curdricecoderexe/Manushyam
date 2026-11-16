@@ -3,6 +3,7 @@ const { Order, WebhookEvent } = require("../Models/Order");
 const orders = require("../Services/orders");
 const { verifyWebhookSignature } = require("../Services/razorpay");
 const { parseDate } = require("../Services/shiprocket");
+const { notifyStaff } = require("../Services/notifications");
 const { getEnv } = require("../Config/runtime");
 const { logger } = require("../Utils/logger");
 
@@ -30,6 +31,66 @@ async function once(provider, eventId, type, handler) {
   }
 }
 
+// Events to enable in Dashboard → Settings → Webhooks (see BE/.env.example). Everything else is
+// acknowledged and ignored. A handler that throws returns 500, the event record is removed and
+// Razorpay retries the delivery (with backoff, for up to 24 hours).
+const RAZORPAY_EVENTS = {
+  // Authorised but not yet captured (automatic capture off, or a late authorisation): capture it.
+  "payment.authorized": (event) => orders.settleRazorpayPayment(event.payload?.payment?.entity, { source: "razorpay" }),
+  "payment.captured": (event) => applyCaptured(event.payload?.payment?.entity),
+  // Fired once the Razorpay order is fully paid; carries the captured payment too.
+  "order.paid": (event) => applyCaptured(event.payload?.payment?.entity),
+  "payment.failed": (event) => {
+    const payment = event.payload?.payment?.entity;
+    if (!payment?.order_id) return null;
+    return orders.recordPaymentFailure({ razorpayOrderId: payment.order_id, reason: payment.error_description });
+  },
+  "refund.processed": async (event) => {
+    const refund = event.payload?.refund?.entity;
+    const order = await orderForRefund(refund);
+    if (order) await orders.finaliseRefund(order, { refundId: refund.id, amount: refund.amount });
+  },
+  "refund.failed": async (event) => {
+    const refund = event.payload?.refund?.entity;
+    const order = await orderForRefund(refund);
+    if (order) await orders.failRefund(order, { refundId: refund.id, reason: refund.error_description || refund.status_details?.description });
+  },
+  // Chargebacks need a human: tell the team straight away.
+  "payment.dispute.created": async (event) => {
+    const dispute = event.payload?.dispute?.entity;
+    const order = dispute?.payment_id ? await Order.findOne({ "payment.razorpayPaymentId": dispute.payment_id }) : null;
+    notifyStaff({
+      type: "payment",
+      title: `Payment dispute${order ? ` on ${order.orderNumber}` : ""}`,
+      body: `${dispute?.reason_description || dispute?.reason_code || "A customer raised a dispute"} · respond in the Razorpay dashboard${dispute?.respond_by ? " before the deadline" : ""}.`.slice(0, 300),
+      link: order ? `/admin/orders?q=${order.orderNumber}` : "/admin/orders",
+    });
+  },
+};
+
+// These events are only sent for a captured payment (the entity may already show a later state, e.g.
+// "refunded", when a delivery is retried — markPaid ignores repeats for an already-paid order).
+function applyCaptured(payment) {
+  if (!payment?.id || !payment.order_id) return null;
+  return orders.markPaid({ razorpayOrderId: payment.order_id, paymentId: payment.id, method: payment.method, amount: payment.amount, source: "razorpay" });
+}
+
+// Refunds started from our side carry the refund id; ones started in the Razorpay dashboard are
+// matched by payment id (the duplicate-payment refund ids are skipped — they're not the order's refund).
+async function orderForRefund(refund) {
+  if (!refund?.id) return null;
+  const byRefund = await Order.findOne({ "refund.razorpayRefundId": refund.id });
+  if (byRefund) return byRefund;
+  if (!refund.payment_id) return null;
+  const dup = await Order.findOne({ "payment.duplicateRefunds.paymentId": refund.payment_id });
+  if (dup) {
+    const status = refund.status === "failed" ? "failed" : "processed";
+    await Order.updateOne({ _id: dup._id, "payment.duplicateRefunds.paymentId": refund.payment_id }, { $set: { "payment.duplicateRefunds.$.status": status, "payment.duplicateRefunds.$.refundId": refund.id } });
+    return null;
+  }
+  return Order.findOne({ "payment.razorpayPaymentId": refund.payment_id });
+}
+
 async function razorpay(req, res) {
   if (!verifyWebhookSignature(req.body, req.get("x-razorpay-signature"))) {
     logger.warn({ ip: req.ip }, "Razorpay webhook with a bad signature");
@@ -41,27 +102,17 @@ async function razorpay(req, res) {
   } catch {
     return res.status(400).json({ error: { code: "INVALID_JSON", message: "Invalid body", requestId: req.id } });
   }
-  const eventId = req.get("x-razorpay-event-id") || crypto.createHash("sha256").update(req.body).digest("hex");
+  // A webhook secret shared with another Razorpay account (or a sub-merchant) must not move our orders.
+  const accountId = getEnv().RAZORPAY_ACCOUNT_ID;
+  if (accountId && event.account_id && event.account_id !== accountId) {
+    logger.warn({ accountId: event.account_id }, "Razorpay webhook for another account — ignored");
+    return res.json({ ok: true, result: "ignored" });
+  }
+  const handler = RAZORPAY_EVENTS[event.event];
+  if (!handler) return res.json({ ok: true, result: "ignored" });
 
-  const result = await once("razorpay", eventId, event.event, async () => {
-    const payment = event.payload?.payment?.entity;
-    switch (event.event) {
-      case "payment.captured":
-        await orders.markPaid({ razorpayOrderId: payment.order_id, paymentId: payment.id, method: payment.method, amount: payment.amount, source: "razorpay" });
-        break;
-      case "payment.failed":
-        await orders.recordPaymentFailure({ razorpayOrderId: payment.order_id, reason: payment.error_description });
-        break;
-      case "refund.processed": {
-        const refund = event.payload?.refund?.entity;
-        const order = await Order.findOne({ "payment.razorpayPaymentId": refund?.payment_id });
-        if (order) await orders.finaliseRefund(order, { refundId: refund.id, amount: refund.amount });
-        break;
-      }
-      default:
-        break; // other events are acknowledged and ignored
-    }
-  });
+  const eventId = req.get("x-razorpay-event-id") || crypto.createHash("sha256").update(req.body).digest("hex");
+  const result = await once("razorpay", eventId, event.event, () => handler(event));
   res.json({ ok: true, result });
 }
 
@@ -95,4 +146,4 @@ async function shiprocket(req, res) {
   res.json({ ok: true, result });
 }
 
-module.exports = { razorpay, shiprocket, safeEqualText };
+module.exports = { razorpay, shiprocket, safeEqualText, RAZORPAY_EVENTS };
