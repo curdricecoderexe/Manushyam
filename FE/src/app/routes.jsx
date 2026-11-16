@@ -104,6 +104,7 @@ export const routes = [
               { path: "customers", element: <Navigate to="/admin/users" replace /> },
               { path: "coupons", ...page(() => import("../pages/admin/Coupons")) },
               { path: "delivery", ...page(() => import("../pages/admin/Delivery")) },
+              { path: "boxes", ...page(() => import("../pages/admin/BoxSizes")) },
               { path: "content", ...page(() => import("../pages/admin/Content")) },
               { path: "blog", ...page(() => import("../pages/admin/BlogPosts")) },
               { path: "blog/new", ...page(() => import("../pages/admin/BlogEditor")) },

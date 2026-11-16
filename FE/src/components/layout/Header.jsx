@@ -13,7 +13,7 @@ import { NotificationBell } from "../notifications/NotificationBell";
 import { SearchBox } from "../search/SearchBox";
 import { Skeleton } from "../ui/primitives";
 
-const linkBase = "flex items-center gap-1.5 border-b-2 py-2 font-serif text-[15px] transition-colors";
+const linkBase = "flex items-center gap-1.5 whitespace-nowrap border-b-2 py-2 font-serif text-[15px] transition-colors";
 
 function navClass({ isActive }) {
   return cn(linkBase, isActive ? "border-gold-600 text-gold-700" : "border-transparent text-cocoa-900 hover:text-gold-700");
@@ -115,16 +115,16 @@ export function Header() {
       </a>
       <AnnouncementBar />
       <div className={cn("sticky top-0 z-30 border-b border-[#EFE3D1] bg-cream-50 transition-shadow", scrolled && "shadow-xs")}>
-        <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-6 px-4 py-3 lg:px-6">
-          <button type="button" className="flex h-11 w-11 items-center justify-center text-cocoa-900 lg:hidden" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
+        <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-3 px-4 py-2.5 sm:gap-6 sm:py-3 lg:px-6">
+          <button type="button" className="flex h-11 w-11 items-center justify-center text-cocoa-900 xl:hidden" aria-label="Open menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}>
             <Menu strokeWidth={1.7} />
           </button>
 
           <Link to="/" aria-label="ManushyaM home" data-brand-logo className="shrink-0">
-            <img src={logo} alt="ManushyaM" className="h-11 w-auto lg:h-[54px]" />
+            <img src={logo} alt="ManushyaM" className="h-10 w-auto sm:h-11 xl:h-[54px]" />
           </Link>
 
-          <nav aria-label="Main" className="hidden items-center gap-9 lg:flex">
+          <nav aria-label="Main" className="hidden items-center gap-7 xl:flex 2xl:gap-9">
             {NAV_ITEMS.map((item) =>
               item.hasMenu ? (
                 <div key={item.key} ref={menuRef} className="relative">
@@ -184,7 +184,7 @@ export function Header() {
       </div>
 
       {drawerOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Menu" className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-cream-100 lg:hidden">
+        <div role="dialog" aria-modal="true" aria-label="Menu" className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-cream-100 xl:hidden">
           <div className="flex items-center justify-between border-b border-sand-400 px-4 py-2">
             <img src={logo} alt="ManushyaM" className="h-10 w-auto" />
             <button type="button" aria-label="Close menu" className="flex h-11 w-11 items-center justify-center text-cocoa-900" onClick={() => setDrawerOpen(false)}>

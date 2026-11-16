@@ -1,4 +1,4 @@
-import { LayoutGrid, ShoppingBag, Package, Users, Ticket, Truck, Image, PenLine, Star, BarChart3, Activity, MessageSquare, Inbox, Settings } from "lucide-react";
+import { LayoutGrid, ShoppingBag, Package, Users, Ticket, Truck, Box, Image, PenLine, Star, BarChart3, Activity, MessageSquare, Inbox, Settings } from "lucide-react";
 
 // `staff: true` items are visible to the staff role; everything else is admin-only (also enforced on the server).
 export const ADMIN_NAV = [
@@ -11,6 +11,7 @@ export const ADMIN_NAV = [
       { to: "/admin/users", label: "Users", icon: Users },
       { to: "/admin/coupons", label: "Coupons", icon: Ticket },
       { to: "/admin/delivery", label: "Delivery & PIN codes", icon: Truck },
+      { to: "/admin/boxes", label: "Box sizes", icon: Box },
     ],
   },
   {

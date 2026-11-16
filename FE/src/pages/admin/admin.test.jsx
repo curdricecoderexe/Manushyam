@@ -328,3 +328,59 @@ describe("orders export", () => {
     expect(text).toContain(",499,");
   });
 });
+
+describe("box sizes", () => {
+  const small = { id: "b1", name: "Small", code: "BOX-S", lengthCm: 18, breadthCm: 12, heightCm: 8, emptyWeightGrams: 60, maxWeightGrams: 700, maxUnits: 2, isActive: true, isDefault: true, notes: "", volumetricWeightGrams: 346 };
+  const medium = { ...small, id: "b2", name: "Medium", code: null, lengthCm: 25, breadthCm: 20, heightCm: 12, maxWeightGrams: null, maxUnits: null, isDefault: false, volumetricWeightGrams: 1200 };
+
+  it("adds a box in cm and grams, shows its volumetric weight and switches the default", async () => {
+    let boxes = [small, medium];
+    const fake = installFakeApi(
+      base(admin, {
+        "GET /api/admin/boxes": () => [200, { boxes, shiprocket: true }],
+        "POST /api/admin/boxes": (body) => {
+          const created = { id: "b3", isActive: true, isDefault: false, notes: "", code: null, maxUnits: null, ...body, volumetricWeightGrams: 4800 };
+          boxes = [...boxes, created];
+          return [201, { box: created }];
+        },
+        "PATCH /api/admin/boxes/b2": (body) => {
+          boxes = boxes.map((b) => (b.id === "b2" ? { ...b, ...body } : body.isDefault ? { ...b, isDefault: false } : b));
+          return [200, { box: boxes.find((b) => b.id === "b2") }];
+        },
+      })
+    );
+    const u = userEvent.setup();
+    renderRoute("/admin/boxes");
+    const table = await screen.findByRole("table", { name: "Box sizes" });
+    expect(within(table).getByText("25 × 20 × 12 cm")).toBeInTheDocument();
+    expect(within(table).getByText("1.2 kg")).toBeInTheDocument();
+    // The default box can't be switched off or deleted.
+    expect(screen.getByRole("switch", { name: "Small in use" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete Small" })).toBeDisabled();
+
+    await u.click(screen.getByRole("button", { name: /New box/ }));
+    const form = await screen.findByRole("form", { name: "New box size" });
+    await u.type(within(form).getByLabelText(/^Name/), "Large carton");
+    await u.type(within(form).getByLabelText(/^Length/), "40");
+    await u.type(within(form).getByLabelText(/^Breadth/), "30");
+    await u.type(within(form).getByLabelText(/^Height/), "20");
+    expect(within(form).getByText(/Volumetric weight 4.8 kg/)).toBeInTheDocument();
+    await u.clear(within(form).getByLabelText(/Empty box weight/));
+    await u.type(within(form).getByLabelText(/Empty box weight/), "180");
+    await u.type(within(form).getByLabelText(/Max contents/), "4.5");
+    await u.click(within(form).getByRole("button", { name: "Add box" }));
+    await waitFor(() => expect(lastCall(fake, "POST", "/api/admin/boxes")?.body).toEqual({ name: "Large carton", lengthCm: 40, breadthCm: 30, heightCm: 20, emptyWeightGrams: 180, maxWeightGrams: 4500, notes: "" }));
+    expect(await screen.findByText("Large carton")).toBeInTheDocument();
+
+    await u.click(screen.getAllByRole("button", { name: "Make default" })[0]);
+    await waitFor(() => expect(lastCall(fake, "PATCH", "/api/admin/boxes/b2")?.body).toEqual({ isDefault: true }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Medium in use" })).toBeDisabled());
+  });
+
+  it("is in the admin menu", async () => {
+    installFakeApi(base(admin, { "GET /api/admin/boxes": () => [200, { boxes: [], shiprocket: false }] }));
+    renderRoute("/admin/boxes");
+    expect(await screen.findByText(/No box sizes yet/)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Box sizes/ }).length).toBeGreaterThan(0);
+  });
+});

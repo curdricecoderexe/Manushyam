@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { Download, ExternalLink, Printer, RotateCw, Search } from "lucide-react";
+import { AlertTriangle, Box, Download, ExternalLink, FileText, Printer, RotateCw, Search } from "lucide-react";
 import { AdminPage, Panel } from "../../components/admin/AdminPage";
 import { DataTable, ErrorNote, Pager } from "../../components/admin/controls";
 import { Dialog } from "../../components/ui/Dialog";
@@ -12,6 +12,7 @@ import { api, downloadFile } from "../../lib/api";
 import { downloadCsv, downloadExcel, today } from "../../lib/exporters";
 import { STATUS_LABELS, STATUS_TONES, formatDate, formatDateTime } from "../../lib/orders";
 import { cn, formatPaise } from "../../lib/cn";
+import { safeHref } from "../../lib/url";
 
 // Mirrors BE/Services/orderState.js (the server is the authority and rejects anything else).
 const NEXT = {
@@ -47,6 +48,65 @@ function ShipForm({ onSubmit, busy }) {
         Confirm shipped
       </Button>
     </form>
+  );
+}
+
+const kg = (g) => (g === null || g === undefined ? "—" : `${(g / 1000).toLocaleString("en-IN", { maximumFractionDigits: 2 })} kg`);
+const boxDims = (b) => `${b.lengthCm} × ${b.breadthCm} × ${b.heightCm} cm`;
+
+// Box to ship in: the suggested one is pre-selected; staff can switch before booking the courier.
+function BoxPicker({ orderId, value, onChange }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let off = false;
+    api(`/api/admin/orders/${orderId}/packaging`)
+      .then((d) => {
+        if (off) return;
+        setData(d.packaging);
+        onChange(d.packaging.suggested.box.id ?? "");
+      })
+      .catch((err) => !off && setError(err.message));
+    return () => {
+      off = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per order
+  }, [orderId]);
+  if (error) return <p className="text-xs text-danger-600">{error}</p>;
+  if (!data) return <Skeleton className="h-11 w-full max-w-md" />;
+  const s = data.suggested;
+  if (data.usingFallback) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-ink-700">
+        <Box className="h-4 w-4" aria-hidden="true" /> Ships in a standard {boxDims(s.box)} carton ({kg(s.weightGrams)}).{" "}
+        <a href="/admin/boxes" className="font-semibold text-gold-700">
+          Set up box sizes
+        </a>
+      </p>
+    );
+  }
+  const chosen = data.boxes.find((b) => b.id === value) ?? data.boxes.find((b) => b.id === s.box.id);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="flex max-w-md flex-col gap-1.5 text-xs font-medium text-ink-700">
+        Box
+        <select value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full rounded-md border border-sand-400 bg-white px-3 text-sm text-cocoa-900">
+          {data.boxes.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name} · {boxDims(b)}
+              {b.id === s.box.id ? " (suggested)" : ""}
+              {b.fits ? "" : " — too small"}
+            </option>
+          ))}
+        </select>
+      </label>
+      {chosen && (
+        <p className={cn("text-xs", chosen.fits ? "text-ink-500" : "text-danger-600")}>
+          {s.units} unit{s.units === 1 ? "" : "s"} · ships at {kg(chosen.weightGrams)} · volumetric {kg(chosen.volumetricWeightGrams)} · billed as {kg(chosen.chargeableWeightGrams)}
+          {chosen.fits ? "" : " · over this box’s limit"}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -99,6 +159,7 @@ function OrderPanel({ orderId, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState(null); // "ship" | "cancel" | "refund"
   const [cancelNote, setCancelNote] = useState("");
+  const [boxId, setBoxId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -139,9 +200,23 @@ function OrderPanel({ orderId, onChanged }) {
     setBusy(true);
     setError("");
     try {
-      const { order: updated } = await api(`/api/admin/orders/${orderId}/shipment`, { method: "POST" });
+      const { order: updated } = await api(`/api/admin/orders/${orderId}/shipment`, { method: "POST", body: !order.shipment?.shipmentId && boxId ? { boxId } : {} });
       applied(updated, updated.shipment?.awb ? "Courier booked." : null);
       if (updated.shipment?.error) setError(`Courier booking failed: ${updated.shipment.error}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function printManifest() {
+    setBusy(true);
+    setError("");
+    try {
+      const { order: updated } = await api(`/api/admin/orders/${orderId}/manifest`, { method: "POST" });
+      setOrder(updated);
+      if (safeHref(updated.shipment?.manifestUrl)) window.open(safeHref(updated.shipment.manifestUrl), "_blank", "noopener,noreferrer");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -191,7 +266,7 @@ function OrderPanel({ orderId, onChanged }) {
                 {ACTION_LABELS[to]}
               </Button>
             ) : (
-              <Button key={to} size="sm" variant={to === "rto" ? "outline" : "brown"} disabled={busy} onClick={() => move(to)}>
+              <Button key={to} size="sm" variant={to === "rto" ? "outline" : "brown"} disabled={busy} onClick={() => move(to, to === "packed" && shiprocket && boxId ? { boxId } : {})}>
                 {to === "packed" && shiprocket ? "Pack & book courier" : ACTION_LABELS[to]}
               </Button>
             )
@@ -212,6 +287,7 @@ function OrderPanel({ orderId, onChanged }) {
             </Button>
           )}
         </div>
+        {shiprocket && next.includes("packed") && !s.shipmentId && <BoxPicker orderId={orderId} value={boxId} onChange={setBoxId} />}
         {mode === "ship" && <ShipForm busy={busy} onSubmit={(shipment) => move("shipped", Object.keys(shipment).length ? { shipment } : {})} />}
         {mode === "cancel" && (
           <form
@@ -222,7 +298,8 @@ function OrderPanel({ orderId, onChanged }) {
             }}
           >
             <Field label="Reason (shown to the customer)" value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} maxLength={300} />
-            {order.payment?.capturedAt && <p>The payment will be marked for refund.</p>}
+            {order.payment?.capturedAt && <p>{order.paymentMethod === "razorpay" ? "The payment will be refunded automatically through Razorpay." : "The payment will be marked for refund."}</p>}
+            {s.shiprocketOrderId && !s.cancelledAt && <p>The Shiprocket shipment (AWB {s.awb ?? "—"}) will be cancelled too.</p>}
             <Button type="submit" size="sm" variant="danger" disabled={busy}>
               Confirm cancellation
             </Button>
@@ -237,23 +314,56 @@ function OrderPanel({ orderId, onChanged }) {
           {s.awb && (
             <p>
               {s.courier ?? "Courier"} · AWB <span className="font-mono">{s.awb}</span>
+              {s.lastStatus && <span className="text-ink-500"> · {s.lastStatus}</span>}
+            </p>
+          )}
+          {s.box?.name && (
+            <p className="text-xs text-ink-700">
+              {s.box.name} · {boxDims(s.box)} · {kg(s.weightGrams)}
+              {s.pickupDate ? ` · pickup ${s.pickupDate}` : ""}
+            </p>
+          )}
+          {s.cancelledAt && <p className="text-xs text-ink-700">Cancelled at Shiprocket {formatDateTime(s.cancelledAt)}</p>}
+          {s.alert?.kind && (
+            <p role="status" className="flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-danger-600">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                {s.alert.title}
+                {s.alert.at ? ` · ${formatDateTime(s.alert.at)}` : ""} — follow up in Shiprocket{s.alert.kind === "ndr" ? " (NDR: reattempt or return)" : ""}.
+              </span>
             </p>
           )}
           <div className="flex flex-wrap gap-3">
-            {s.labelUrl && (
-              <a href={s.labelUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-gold-700">
+            {safeHref(s.labelUrl) && (
+              <a href={safeHref(s.labelUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-gold-700">
                 <Printer className="h-4 w-4" aria-hidden="true" /> Print label
               </a>
             )}
-            {s.trackingUrl && (
-              <a href={s.trackingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-gold-700">
+            {s.awb && shiprocket && !s.cancelledAt && (
+              <button type="button" disabled={busy} onClick={safeHref(s.manifestUrl) ? () => window.open(safeHref(s.manifestUrl), "_blank", "noopener,noreferrer") : printManifest} className="inline-flex items-center gap-1.5 font-semibold text-gold-700 disabled:opacity-50">
+                <FileText className="h-4 w-4" aria-hidden="true" /> Manifest
+              </button>
+            )}
+            {safeHref(s.trackingUrl) && (
+              <a href={safeHref(s.trackingUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-gold-700">
                 <ExternalLink className="h-4 w-4" aria-hidden="true" /> Tracking
               </a>
             )}
           </div>
+          {s.warning && !s.error && (
+            <div className="flex flex-wrap items-center gap-2 text-warn-800">
+              {s.warning}
+              {shiprocket && !s.cancelledAt && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={retryBooking}>
+                  <RotateCw className="h-4 w-4" aria-hidden="true" /> Try again
+                </Button>
+              )}
+            </div>
+          )}
           {s.error && (
-            <div className="flex flex-wrap items-center gap-2 text-danger-600">
-              Booking failed: {s.error}
+            <div className="flex flex-col gap-2 text-danger-600">
+              <span>Booking failed: {s.error}</span>
+              {order.status === "packed" && shiprocket && !s.shipmentId && <BoxPicker orderId={orderId} value={boxId} onChange={setBoxId} />}
               {order.status === "packed" && shiprocket && (
                 <Button size="sm" variant="outline" disabled={busy} onClick={retryBooking}>
                   <RotateCw className="h-4 w-4" aria-hidden="true" /> Retry booking
@@ -538,6 +648,7 @@ export default function Orders() {
                   <span className="inline-flex flex-wrap items-center justify-end gap-1">
                     <StatusPill tone={STATUS_TONES[o.status]}>{STATUS_LABELS[o.status]}</StatusPill>
                     {o.shipment?.error && o.status === "packed" && <span className="text-xs text-danger-600">booking failed</span>}
+                    {o.shipment?.alert?.kind && ["shipped", "out_for_delivery", "packed"].includes(o.status) && <span className="text-xs text-danger-600">{o.shipment.alert.title.toLowerCase()}</span>}
                   </span>
                 </td>
               </tr>

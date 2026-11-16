@@ -27,7 +27,7 @@ export function ProductGallery({ images, name, badge }) {
   if (!current) return <div className="aspect-[1/1.1] rounded-lg border border-sand-400 bg-[#F4EADB]" />;
 
   return (
-    <section aria-label="Product images" className="flex gap-4">
+    <section aria-label="Product images" className="flex min-w-0 gap-4">
       {count > 1 && (
         <div className="hidden w-[84px] shrink-0 flex-col items-center gap-3 md:flex">
           {count > RAIL_VISIBLE && (

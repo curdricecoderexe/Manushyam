@@ -254,3 +254,40 @@ describe("inventory", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/admin/products/p9"));
   });
 });
+
+describe("packing with Shiprocket", () => {
+  const smallBox = { id: "b1", name: "Small", code: null, lengthCm: 18, breadthCm: 12, heightCm: 8, emptyWeightGrams: 60, maxWeightGrams: 700, maxUnits: 2, isActive: true, isDefault: false, fits: true, weightGrams: 580, volumetricWeightGrams: 346, chargeableWeightGrams: 580 };
+  const bigBox = { ...smallBox, id: "b2", name: "Large", lengthCm: 40, breadthCm: 30, heightCm: 20, maxWeightGrams: null, maxUnits: null, isDefault: true, weightGrams: 720, volumetricWeightGrams: 4800, chargeableWeightGrams: 4800 };
+
+  it("suggests a box, lets staff switch it and sends it with “Pack & book courier”", async () => {
+    const { handlers, state } = ordersApi(staff, { shiprocket: true });
+    handlers["GET /api/admin/orders/o1/packaging"] = () => [200, { packaging: { boxes: [smallBox, bigBox], suggested: { box: { id: "b1", name: "Small", lengthCm: 18, breadthCm: 12, heightCm: 8 }, units: 2, weightGrams: 580, fits: true }, usingFallback: false }, booked: false }];
+    const fake = installFakeApi(handlers);
+    const user = userEvent.setup();
+    renderRoute("/admin/orders?q=MM261004-7KQ2X");
+    const panel = await screen.findByRole("dialog", { name: "Order MM261004-7KQ2X" });
+    const select = await within(panel).findByLabelText("Box");
+    expect(select.value).toBe("b1");
+    expect(within(panel).getByText(/billed as 0.58 kg/)).toBeInTheDocument();
+    await user.selectOptions(select, "b2");
+    expect(within(panel).getByText(/billed as 4.8 kg/)).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Pack & book courier" }));
+    await waitFor(() => expect(fake.calls.filter((c) => c.method === "POST" && c.path === "/api/admin/orders/o1/status").at(-1)?.body).toEqual({ status: "packed", boxId: "b2" }));
+    expect(state.order.status).toBe("packed");
+  });
+
+  it("shows the box, courier alerts and lets staff finish a pending pickup", async () => {
+    const shipment = { shipmentId: "7001", awb: "SR123", courier: "Delhivery", lastStatus: "UNDELIVERED", box: { name: "Small", lengthCm: 18, breadthCm: 12, heightCm: 8 }, weightGrams: 580, warning: "Pickup not scheduled: try later", alert: { kind: "ndr", title: "Delivery attempt failed", at: "2026-10-06T10:00:00Z" }, events: [] };
+    const { handlers } = ordersApi(staff, { shiprocket: true, order: adminOrder({ status: "shipped", shipment }) });
+    handlers["POST /api/admin/orders/o1/shipment"] = () => [200, { order: adminOrder({ status: "shipped", shipment: { ...shipment, warning: null } }) }];
+    const fake = installFakeApi(handlers);
+    const user = userEvent.setup();
+    renderRoute("/admin/orders?q=MM261004-7KQ2X");
+    const panel = await screen.findByRole("dialog", { name: "Order MM261004-7KQ2X" });
+    expect(await within(panel).findByText(/Small · 18 × 12 × 8 cm · 0.58 kg/)).toBeInTheDocument();
+    expect(within(panel).getByRole("status")).toHaveTextContent(/Delivery attempt failed.*NDR/);
+    await user.click(within(panel).getByRole("button", { name: /Try again/ }));
+    await waitFor(() => expect(fake.calls.some((c) => c.method === "POST" && c.path === "/api/admin/orders/o1/shipment")).toBe(true));
+    await waitFor(() => expect(within(panel).queryByText(/Pickup not scheduled/)).not.toBeInTheDocument());
+  });
+});

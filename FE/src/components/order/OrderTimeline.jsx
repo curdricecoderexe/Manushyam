@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { TIMELINE, STATUS_LABELS, reachedStep, stepTime, isClosed, formatDateTime } from "../../lib/orders";
 import { cn } from "../../lib/cn";
+import { safeHref } from "../../lib/url";
 
 // Vertical progress line: confirmed → … → delivered, with a closing row for cancelled/returned/refunded.
 export function OrderTimeline({ order }) {
@@ -72,8 +73,8 @@ export function ShipmentEvents({ shipment }) {
           {shipment.courier && <strong className="font-medium text-cocoa-900">{shipment.courier}</strong>}
           {shipment.awb && <span className="text-ink-500"> · AWB {shipment.awb}</span>}
         </span>
-        {shipment.trackingUrl && (
-          <a href={shipment.trackingUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-gold-700">
+        {safeHref(shipment.trackingUrl) && (
+          <a href={safeHref(shipment.trackingUrl)} target="_blank" rel="noopener noreferrer" className="font-semibold text-gold-700">
             Track with courier ↗
           </a>
         )}
